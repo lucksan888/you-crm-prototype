@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+:root {
+  --you-navy: #153f4a;
+  --you-teal: #1f6f78;
+  --you-teal-dark: #0f4e5b;
+  --you-orange: #e95d34;
+  --you-green: #7aa640;
+  --you-bg: #f3f4f4;
+  --you-panel: #ffffff;
+  --you-soft: #f8faf9;
+  --you-text: #22383d;
+  --you-muted: #617477;
+  --you-line: #d6dfdf;
+  --you-line-dark: #b8c9ca;
+  --you-header: #e8eeee;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--you-bg);
+  color: var(--you-text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border-radius: 2px !important;
+}
+
+input,
+select,
+textarea {
+  border-radius: 2px !important;
+  border-color: var(--you-line-dark) !important;
+  color: var(--you-text);
+}
+
+.bg-slate-950,
+.bg-slate-900 {
+  background-color: var(--you-navy) !important;
+}
+
+.bg-slate-100 {
+  background-color: var(--you-bg) !important;
+}
+
+.bg-white {
+  background-color: var(--you-panel) !important;
+}
+
+.bg-slate-50,
+.bg-\[\#f3f7f7\] {
+  background-color: var(--you-soft) !important;
+}
+
+.bg-\[\#e8eeee\] {
+  background-color: var(--you-header) !important;
+}
+
+.bg-\[\#0b4a56\] {
+  background-color: var(--you-teal) !important;
+}
+
+.border-slate-200,
+.border-slate-300,
+.border-\[\#bfd0d3\] {
+  border-color: var(--you-line) !important;
+}
+
+.text-\[\#0b4a56\],
+.text-\[\#0b3f49\] {
+  color: var(--you-navy) !important;
+}
+
+.text-slate-900 {
+  color: var(--you-text) !important;
+}
+
+.text-slate-500,
+.text-slate-600 {
+  color: var(--you-muted) !important;
+}
+
+.rounded-3xl,
+.rounded-2xl,
+.rounded-xl,
+.rounded-full {
+  border-radius: 2px !important;
+}
+
+.shadow-xl,
+.shadow-2xl,
+.shadow-sm {
+  box-shadow: none !important;
+}
+
+aside {
+  border-right: 1px solid var(--you-line-dark);
+}
+
+aside h2 {
+  letter-spacing: 0.01em;
+}
+
+main h1,
+main h2,
+main h3,
+main h4 {
+  color: var(--you-navy);
+}
+
+main section > div:first-child p:first-child {
+  letter-spacing: 0.18em !important;
+}
+
+main button.bg-\[\#0b4a56\],
+main button.bg-slate-900,
+form button.bg-\[\#0b4a56\],
+form button.bg-slate-900 {
+  background-color: var(--you-orange) !important;
+  border-color: var(--you-orange) !important;
+}
+
+nav button {
+  font-weight: 700;
+}
+
+.recharts-wrapper text {
+  font-family: Arial, Helvetica, sans-serif !important;
+}
