@@ -5764,6 +5764,12 @@ const START_TASKS = [
   { id: 4, title: "Shortlist job board postings for Chris T.", youth: "Chris T.", owner: "Job Board Team", due: "Next check-in", priority: "Medium", status: "Open" },
 ];
 
+const START_IMPORTANT_DATES = [
+  { id: 1, title: "Housing priority review", date: "2026-05-18", owner: "Housing Team", note: "Review placement and transportation risk for Brianna K." },
+  { id: 2, title: "Employment coaching check-in", date: "2026-05-21", owner: "Employment Services", note: "Resume support and job board shortlist for Alex M." },
+  { id: 3, title: "Cross-department case conference", date: "2026-05-28", owner: "Leadership", note: "Review high-priority youth and active referrals." },
+];
+
 const START_COMMS = [
   { id: 1, threadId: "channel-All departments", from: "Maya Chen", department: "Leadership", audience: "All departments", subject: "Weekly case conference", body: "Please add priority youth and cross-department blockers before Thursday afternoon.", date: "May 11, 2026 9:30 AM" },
   { id: 2, threadId: "person-Jordan Patel", from: "Jordan Patel", department: "Housing", audience: "Employment Services", subject: "Employment readiness for Alex M.", body: "Housing is stable this week. Please proceed with resume support and job board review.", date: "May 11, 2026 10:15 AM" },
@@ -5780,8 +5786,29 @@ const TREND = [
   { month: "Jun", intake: 41 },
 ];
 
+function isManagement(user) {
+  return user?.role === "Management";
+}
+
+function isCaseWorker(user) {
+  return user?.role === "Case Worker";
+}
+
+function isStaff(user) {
+  return user?.role === "Staff";
+}
+
 function canView(user) {
-  return user?.role === "Management" || user?.role === "Case Worker";
+  return isManagement(user) || isCaseWorker(user);
+}
+
+function canGrantSensitiveAccess(user) {
+  return isManagement(user) || isCaseWorker(user);
+}
+
+function hasSensitiveAccess(user, profile) {
+  if (!user || !profile) return false;
+  return canView(user) || (profile.sensitiveAccess || []).includes(user.email);
 }
 
 function percent(profile) {
@@ -5940,6 +5967,7 @@ function Sidebar({ user, page, setPage, onLogout }) {
     ["profiles", "👥", "Youth Profiles"],
     ["messages", "💬", "Messages & Referrals"],
     ["microsoft", "▣", "Microsoft 365"],
+    ["planner", "□", "Task Planner"],
   ];
   return (
     <aside className="w-full md:w-72 bg-[#eef7e6] text-slate-950 p-5 md:min-h-screen border-r border-[#bfd0d3]">
@@ -6060,24 +6088,24 @@ function PriorityTasks({ tasks, setTasks }) {
   );
 }
 
-function DepartmentNotesPanel({ activeTab, note, setNote, addDepartmentNote, showAllNotes, setShowAllNotes, visibleNotes, selectedNotes }) {
+function DepartmentNotesPanel({ activeTab, note, setNote, addDepartmentNote, showAllNotes, setShowAllNotes, visibleNotes, selectedNotes, canReadHistory }) {
   return (
     <div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <h4 className="font-black text-xl text-[#0b4a56]">Department Notes & History</h4>
-          <p className="text-sm text-slate-600">{showAllNotes ? "Showing all notes across the client profile." : `Showing notes for ${activeTab}.`}</p>
+          <p className="text-sm text-slate-600">{canReadHistory ? (showAllNotes ? "Showing all notes across the client profile." : `Showing notes for ${activeTab}.`) : "You can add notes here. History is restricted until access is granted."}</p>
         </div>
-        <button onClick={() => setShowAllNotes(!showAllNotes)} className="bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-2 font-bold">
+        {canReadHistory && <button onClick={() => setShowAllNotes(!showAllNotes)} className="bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-2 font-bold">
           {showAllNotes ? "Show current section" : `Show all history (${selectedNotes.length})`}
-        </button>
+        </button>}
       </div>
       <div className="flex flex-col md:flex-row gap-2 mb-5">
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={`Add a note for ${activeTab}...`} className="flex-1 border-2 border-[#bfd0d3] p-3" />
         <CopyButton value={note} />
         <button onClick={addDepartmentNote} className="bg-[#0b4a56] text-white px-5 font-bold">Add note</button>
       </div>
-      <div className="space-y-3">
+      {canReadHistory ? <div className="space-y-3">
         {visibleNotes.length === 0 && <div className="bg-white border border-slate-200 p-4 text-slate-600">No notes recorded for this view yet.</div>}
         {visibleNotes.map((item) => (
           <div key={item.id} className="bg-white border border-slate-200 p-4">
@@ -6089,7 +6117,7 @@ function DepartmentNotesPanel({ activeTab, note, setNote, addDepartmentNote, sho
             <p className="text-xs text-slate-500 mt-2">{item.author} • {item.role}</p>
           </div>
         ))}
-      </div>
+      </div> : <div className="bg-white border border-[#bfd0d3] p-4 text-slate-700">Note history, case details, and sensitive comments are hidden for this role. A case worker or manager can grant profile-specific access.</div>}
     </div>
   );
 }
@@ -6109,6 +6137,7 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
   const [serviceFilter, setServiceFilter] = useState("All");
   const [riskFilter, setRiskFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All");
+  const [grantTarget, setGrantTarget] = useState("employment@you.org");
   const [newProfile, setNewProfile] = useState({ name: "", age: "", gender: "", status: "Active", location: "", programs: "Housing", goal: "" });
 
   const locationOptions = Array.from(new Set(youth.map((y) => y.location))).sort();
@@ -6123,6 +6152,31 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
   });
   const selectedNotes = selected ? noteHistory(selected) : [];
   const visibleNotes = showAllNotes ? selectedNotes : selectedNotes.filter((item) => item.department === activeTab);
+  const canReadSelectedSensitive = selected ? hasSensitiveAccess(user, selected) : false;
+  const staffUsers = USERS.filter((member) => member.role === "Staff");
+  const sensitiveContactData = selected && canReadSelectedSensitive ? {
+    Phone: selected.phone,
+    Email: selected.email,
+    "Safe Contact Method": selected.safeContact,
+    "Current Location": selected.location,
+    "Consent Status": selected.consent["Share Across Programs"] ? "Active consent" : "Limited consent",
+    "Consent Scope": selected.consent["Share Across Programs"] ? "Internal YOU teams only" : "Restricted by consent",
+    "Privacy Level": selected.privacy,
+    "Sensitive File Flag": selected.sensitiveFlag
+  } : {
+    Phone: "Restricted",
+    Email: "Restricted",
+    "Safe Contact Method": "Restricted",
+    "Current Location": "Restricted",
+    "Consent Status": "Restricted",
+    "Consent Scope": "Restricted",
+    "Privacy Level": selected?.privacy || "Restricted",
+    "Sensitive File Flag": selected?.sensitiveFlag || "Restricted"
+  };
+  const selectedSectionData = selected && (canReadSelectedSensitive || !["Contact Info", "Consent", "Case Note"].includes(activeTab)) ? selected.info?.[activeTab] : {
+    "Access Level": "Restricted",
+    Details: "Sensitive information hidden for this login"
+  };
 
   function clearFilters() {
     setQuery("");
@@ -6144,7 +6198,8 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
   function makeSummary(profile = selected) {
     if (!profile) return;
     const latest = noteHistory(profile)[0]?.text || "No notes recorded";
-    setSummary(`${profile.preferredName || profile.name} has a ${percent(profile)}% completed profile. Current state: ${profile.status}. Location: ${profile.location}. Programs: ${profile.programs.join(", ")}. Goal: ${profile.goal || "not set"}. Consent: ${profile.consent["Share Across Programs"] ? "cross-program sharing allowed" : "limited sharing"}. Latest note: ${canView(user) ? latest : "restricted by role"}.`);
+    const allowed = hasSensitiveAccess(user, profile);
+    setSummary(`${profile.preferredName || profile.name} has a ${percent(profile)}% completed profile. Current state: ${profile.status}. Location: ${allowed ? profile.location : "restricted"}. Programs: ${profile.programs.join(", ")}. Goal: ${allowed ? (profile.goal || "not set") : "restricted by role"}. Consent: ${allowed ? (profile.consent["Share Across Programs"] ? "cross-program sharing allowed" : "limited sharing") : "restricted by role"}. Latest note: ${allowed ? latest : "restricted by role"}.`);
   }
 
   function saveEdits() {
@@ -6177,6 +6232,7 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
       risk: "Low",
       consent: { Shelter: false, Employment: false, Justice: false, Health: false, "Share Across Programs": false },
       completed: ["Vitals"],
+      sensitiveAccess: [],
       notes: ["New profile created."],
       departmentNotes: {
         "Case Note": [{ id: Date.now(), author: user.name, role: user.role, date: new Date().toISOString(), text: "New profile created." }],
@@ -6242,6 +6298,16 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
     setYouth(updated);
     setSelected(updated.find((y) => y.id === selected.id));
     setGoalText("");
+  }
+
+  function grantSensitiveAccess() {
+    if (!selected || !canGrantSensitiveAccess(user)) return;
+    const updated = youth.map((y) => {
+      if (y.id !== selected.id) return y;
+      return { ...y, sensitiveAccess: Array.from(new Set([...(y.sensitiveAccess || []), grantTarget])) };
+    });
+    setYouth(updated);
+    setSelected(updated.find((y) => y.id === selected.id));
   }
 
   return (
@@ -6325,17 +6391,19 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
               <div className="flex flex-wrap gap-3 justify-end mb-4 pr-24"><button onClick={() => setEditMode(true)} className="border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-2 font-bold bg-white">Edit Profile</button><button onClick={() => makeSummary()} className="bg-[#0b4a56] text-white px-4 py-2 font-bold">Generate Summary</button></div>
               {editMode && <div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5 mb-6"><h3 className="font-black text-2xl text-[#0b4a56] mb-4">Edit Profile</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-3">{EDIT_FIELDS.map(([key, label]) => <CopyableInput key={key} label={label} value={editForm[key]} onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })} />)}<label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-[#0b4a56]">Client state</span><div className="flex gap-2"><select value={editForm.status || "Active"} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="w-full border-2 border-[#bfd0d3] p-3"><option>Active</option><option>Waitlist</option><option>Closed</option></select><CopyButton value={editForm.status || "Active"} /></div></label></div><div className="flex gap-3 mt-4"><button onClick={saveEdits} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Save changes</button><button onClick={() => setEditMode(false)} className="bg-white border-2 border-[#bfd0d3] px-5 py-3 font-bold text-[#0b4a56]">Cancel</button></div></div>}
               <p className="tracking-[0.35em] text-sm font-bold text-slate-500 uppercase">Youth Opportunities Unlimited</p><h2 className="text-4xl font-black text-[#0b3f49]">Client Summary Note</h2><p className="text-xl text-slate-700 mt-2">A client coordination summary generated from the completed record.</p>
-              <div className="border-t-2 border-[#bfd0d3] mt-6 pt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Client Overview</h3><Rows data={{ "Legal Name": selected.legalName, "Preferred Name": selected.preferredName, "DOB / Age": `Not recorded / ${selected.age}`, Gender: selected.gender, Pronouns: selected.pronouns, "File Number": selected.fileNumber, "Client State": selected.status }} /></div><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Contact & Privacy</h3><Rows data={{ Phone: selected.phone, Email: selected.email, "Safe Contact Method": selected.safeContact, "Current Location": selected.location, "Consent Status": selected.consent["Share Across Programs"] ? "Active consent" : "Limited consent", "Consent Scope": selected.consent["Share Across Programs"] ? "Internal YOU teams only" : "Restricted by consent", "Privacy Level": selected.privacy, "Sensitive File Flag": selected.sensitiveFlag }} /></div></div>
+              <div className="border-t-2 border-[#bfd0d3] mt-6 pt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Client Overview</h3><Rows data={{ "Legal Name": selected.legalName, "Preferred Name": selected.preferredName, "DOB / Age": `Not recorded / ${selected.age}`, Gender: selected.gender, Pronouns: selected.pronouns, "File Number": selected.fileNumber, "Client State": selected.status }} /></div><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Contact & Privacy</h3><Rows data={sensitiveContactData} /></div></div>
             </div>
+            {!canReadSelectedSensitive && <div className="bg-white p-5 border-2 border-[#bfd0d3]"><h3 className="font-black text-[#0b4a56]">Sensitive Access Restricted</h3><p className="text-slate-700 mt-1">This login can add profile updates and notes, but private contact details, consent details, goals, and note history stay hidden until a case worker or manager grants access for this specific profile.</p></div>}
+            {canGrantSensitiveAccess(user) && <div className="bg-white p-5 border-2 border-[#bfd0d3]"><h3 className="font-black text-[#0b4a56] mb-3">Sensitive Access Control</h3><div className="flex flex-col md:flex-row gap-3"><select value={grantTarget} onChange={(e) => setGrantTarget(e.target.value)} className="flex-1 border-2 border-[#bfd0d3] p-3 bg-white">{staffUsers.map((member) => <option key={member.email} value={member.email}>{member.name} - {member.role}</option>)}</select><button onClick={grantSensitiveAccess} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Grant profile access</button></div><p className="text-sm text-slate-600 mt-3">Authorized staff: {(selected.sensitiveAccess || []).length ? selected.sensitiveAccess.join(", ") : "None yet"}</p></div>}
             {summary && <div className="bg-amber-50 p-5 border-2 border-amber-200"><h3 className="font-black text-[#0b4a56] mb-2">Generated Case Summary</h3><p className="text-slate-700">{summary}</p></div>}
             <div className="bg-white border-2 border-[#bfd0d3]">
               <div className="flex flex-wrap border-b-2 border-[#bfd0d3]">{TABS.map((tab) => <button key={tab} onClick={() => { setActiveTab(tab); setShowAllNotes(false); }} className={`px-6 py-4 font-black text-lg border-r-2 border-[#bfd0d3] ${activeTab === tab ? "bg-white text-[#0b4a56]" : "bg-[#e8eeee] text-[#0b4a56]"}`}>{tab}</button>)}</div>
               <div className="p-6 space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><h3 className="text-2xl font-black text-[#0b4a56]">{activeTab}</h3><p className="text-slate-600">Only the selected department section is shown here.</p></div><button onClick={() => markComplete(activeTab)} className="bg-[#0b4a56] text-white px-4 py-3 font-bold">Mark section complete</button></div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h4 className="font-black text-xl text-[#0b4a56] mb-4">Information Collected</h4><Rows data={selected.info?.[activeTab]} /></div><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h4 className="font-black text-xl text-[#0b4a56] mb-4">Stage Completion</h4>{TABS.map((section) => <div key={section} className="flex items-center justify-between border-b border-[#bfd0d3] py-3"><span className="font-bold text-[#0b4a56]">{section}</span><span className={selected.completed.includes(section) ? "text-green-700 font-bold" : "text-slate-500"}>{selected.completed.includes(section) ? "Completed" : "Not complete"}</span></div>)}</div></div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h4 className="font-black text-xl text-[#0b4a56] mb-4">Information Collected</h4><Rows data={selectedSectionData} /></div><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h4 className="font-black text-xl text-[#0b4a56] mb-4">Stage Completion</h4>{TABS.map((section) => <div key={section} className="flex items-center justify-between border-b border-[#bfd0d3] py-3"><span className="font-bold text-[#0b4a56]">{section}</span><span className={selected.completed.includes(section) ? "text-green-700 font-bold" : "text-slate-500"}>{selected.completed.includes(section) ? "Completed" : "Not complete"}</span></div>)}</div></div>
                 {activeTab === "Consent" && <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{Object.entries(selected.consent).map(([key, value]) => <button key={key} className={`p-4 text-left border-2 ${value ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}><p className="font-bold text-[#0b4a56]">{key}</p><p className="text-sm text-slate-600">{value ? "Consent granted" : "Consent not granted"}</p></button>)}</div>}
-                {activeTab === "Case Note" && canView(user) && <div className="bg-slate-50 border-2 border-[#bfd0d3] p-4"><h4 className="font-black text-[#0b4a56] mb-3">Youth Goal</h4><div className="mb-3 flex items-start gap-2"><p className="min-w-0 flex-1">{selected.goal || "No goal set yet."}</p><CopyButton value={selected.goal || ""} /></div><div className="flex flex-col md:flex-row gap-2"><input value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="Set a goal..." className="flex-1 border-2 border-[#bfd0d3] p-3" /><CopyButton value={goalText} /><button onClick={setGoal} className="bg-[#0b4a56] text-white px-5 font-bold">Set goal</button></div></div>}
-                {canView(user) && <DepartmentNotesPanel activeTab={activeTab} note={note} setNote={setNote} addDepartmentNote={addDepartmentNote} showAllNotes={showAllNotes} setShowAllNotes={setShowAllNotes} visibleNotes={visibleNotes} selectedNotes={selectedNotes} />}
+                {activeTab === "Case Note" && canReadSelectedSensitive && <div className="bg-slate-50 border-2 border-[#bfd0d3] p-4"><h4 className="font-black text-[#0b4a56] mb-3">Youth Goal</h4><div className="mb-3 flex items-start gap-2"><p className="min-w-0 flex-1">{selected.goal || "No goal set yet."}</p><CopyButton value={selected.goal || ""} /></div><div className="flex flex-col md:flex-row gap-2"><input value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="Set a goal..." className="flex-1 border-2 border-[#bfd0d3] p-3" /><CopyButton value={goalText} /><button onClick={setGoal} className="bg-[#0b4a56] text-white px-5 font-bold">Set goal</button></div></div>}
+                <DepartmentNotesPanel activeTab={activeTab} note={note} setNote={setNote} addDepartmentNote={addDepartmentNote} showAllNotes={showAllNotes} setShowAllNotes={setShowAllNotes} visibleNotes={visibleNotes} selectedNotes={selectedNotes} canReadHistory={canReadSelectedSensitive} />
               </div>
             </div>
           </div>
@@ -6370,18 +6438,31 @@ function Messages({ user, messages, setMessages }) {
 }
 
 function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, setTasks }) {
-  const [selectedThread, setSelectedThread] = useState({ type: "channel", id: "All departments", name: "All departments", department: "Organization-wide" });
+  const staffLimitedMessaging = isStaff(user);
+  const canBroadcastAllDepartments = isManagement(user);
+  const [selectedThread, setSelectedThread] = useState(staffLimitedMessaging ? { type: "person", id: "Jordan Patel", name: "Jordan Patel", department: "Housing", role: "Case Worker", status: "Available" } : { type: "channel", id: "All departments", name: "All departments", department: "Organization-wide" });
   const [messageText, setMessageText] = useState("");
   const [search, setSearch] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskYouth, setTaskYouth] = useState("");
   const [taskOwner, setTaskOwner] = useState("Housing Team");
+  const [taskNote, setTaskNote] = useState("");
   const [showMicrosoftLogin, setShowMicrosoftLogin] = useState(false);
   const [connectStep, setConnectStep] = useState("login");
   const [microsoftEmail, setMicrosoftEmail] = useState(user.email.replace("@you.org", "@you.ca"));
   const [microsoftConnected, setMicrosoftConnected] = useState(false);
+  const [teamsPanelOpen, setTeamsPanelOpen] = useState(false);
+  const [plannerSyncing, setPlannerSyncing] = useState(false);
+  const [plannerLastSync, setPlannerLastSync] = useState("Not synced yet");
+  const [integrationNotice, setIntegrationNotice] = useState("");
+  const [audienceScope, setAudienceScope] = useState(canBroadcastAllDepartments ? "all" : "certain");
+  const [departmentTarget, setDepartmentTarget] = useState("Housing");
+  const [recipientMode, setRecipientMode] = useState(staffLimitedMessaging ? "individual" : "department");
+  const [individualTarget, setIndividualTarget] = useState("Jordan Patel");
 
   const staff = STAFF_DIRECTORY.filter((member) => member.name !== user.name && `${member.name} ${member.role} ${member.department}`.toLowerCase().includes(search.toLowerCase()));
+  const departmentStaff = STAFF_DIRECTORY.filter((member) => member.department === departmentTarget && member.name !== user.name);
+  const recentChats = Array.from(new Set(teamsMessages.map((item) => item.from).filter((name) => name !== user.name))).map((name) => STAFF_DIRECTORY.find((member) => member.name === name)).filter(Boolean);
   const threadId = `${selectedThread.type}-${selectedThread.id}`;
   const threadMessages = teamsMessages.filter((item) => item.threadId === threadId);
   const plannerBuckets = ["Open", "Waiting", "Done"];
@@ -6390,6 +6471,10 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
   function sendChat(e) {
     e.preventDefault();
     if (!messageText.trim()) return;
+    if (staffLimitedMessaging && selectedThread.type !== "person") {
+      setIntegrationNotice("Staff can send Teams messages to individual staff only. Choose a recent chat or select an individual.");
+      return;
+    }
     setTeamsMessages([{
       id: Date.now(),
       threadId,
@@ -6400,6 +6485,8 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
       body: messageText.trim(),
       date: new Date().toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }),
     }, ...teamsMessages]);
+    setTeamsPanelOpen(true);
+    setIntegrationNotice("Message added to the CRM Teams history.");
     setMessageText("");
   }
 
@@ -6418,16 +6505,75 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
     }, ...tasks]);
     setTaskTitle("");
     setTaskYouth("");
+    setPlannerLastSync("New task waiting to sync");
+    setIntegrationNotice("Planner task created in the CRM queue.");
   }
 
   function updateTaskStatus(id, status) {
-    setTasks(tasks.map((task) => task.id === id ? { ...task, status } : task));
+    setTasks(tasks.map((task) => task.id === id ? { ...task, status, plannerSynced: false } : task));
+    setPlannerLastSync("Task status changed; sync recommended");
   }
 
   function createTeamsFollowUp(task) {
     const target = task.owner.includes("Housing") ? "Housing" : task.owner.includes("Employment") ? "Employment Services" : "All departments";
     setSelectedThread({ type: "channel", id: target, name: target, department: target === "All departments" ? "Organization-wide" : target });
     setMessageText(`Planner follow-up: ${task.title} for ${task.youth}. Owner: ${task.owner}.`);
+    setTeamsPanelOpen(true);
+    setIntegrationNotice("Teams follow-up draft prepared from the Planner task.");
+  }
+
+  function openTeamsThread() {
+    setTeamsPanelOpen(true);
+    setIntegrationNotice(`Opened ${selectedThread.type === "channel" ? "#" : ""}${selectedThread.name} Teams thread.`);
+  }
+
+  function syncPlannerTasks() {
+    setPlannerSyncing(true);
+    setIntegrationNotice("Syncing CRM tasks with Microsoft Planner...");
+    window.setTimeout(() => {
+      const syncedAt = new Date().toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      setTasks(tasks.map((task) => ({
+        ...task,
+        plannerSynced: true,
+        plannerId: task.plannerId || `PLN-${String(task.id).slice(-5)}`,
+      })));
+      setPlannerSyncing(false);
+      setPlannerLastSync(syncedAt);
+      setIntegrationNotice(`Planner sync complete at ${syncedAt}.`);
+    }, 950);
+  }
+
+  function applyTeamsTarget() {
+    if (staffLimitedMessaging) {
+      const member = STAFF_DIRECTORY.find((item) => item.name === individualTarget) || departmentStaff[0];
+      if (member) {
+        setSelectedThread({ type: "person", id: member.name, name: member.name, department: member.department, role: member.role, status: member.status });
+        setAudienceScope("certain");
+        setRecipientMode("individual");
+        setIntegrationNotice(`Staff target set to ${member.name}. Staff messages are limited to individual chats.`);
+      }
+      return;
+    }
+    if (audienceScope === "all") {
+      if (!canBroadcastAllDepartments) {
+        setAudienceScope("certain");
+        setIntegrationNotice("Only management can send all-department broadcasts.");
+        return;
+      }
+      setSelectedThread({ type: "channel", id: "All departments", name: "All departments", department: "Organization-wide" });
+      setIntegrationNotice("Teams target set to all departments.");
+      return;
+    }
+    if (recipientMode === "department") {
+      setSelectedThread({ type: "channel", id: departmentTarget, name: departmentTarget, department: departmentTarget });
+      setIntegrationNotice(`Teams target set to ${departmentTarget}.`);
+      return;
+    }
+    const member = STAFF_DIRECTORY.find((item) => item.name === individualTarget) || departmentStaff[0];
+    if (member) {
+      setSelectedThread({ type: "person", id: member.name, name: member.name, department: member.department, role: member.role, status: member.status });
+      setIntegrationNotice(`Teams target set to ${member.name}.`);
+    }
   }
 
   function openMicrosoftLogin() {
@@ -6454,34 +6600,40 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
     <section className="space-y-6">
       <div>
         <p className="tracking-[0.28em] text-sm font-bold text-slate-500 uppercase">Microsoft 365 Integration</p>
-        <h1 className="text-4xl font-black text-[#0b3f49]">Teams & Planner Workspace</h1>
-        <p className="text-slate-600">Prototype view for staff chat, department channels, and Planner task coordination.</p>
+        <h1 className="text-4xl font-black text-[#0b3f49]">Teams Workspace</h1>
+        <p className="text-slate-600">Prototype view for staff chat, department channels, and Microsoft account connection.</p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Microsoft Sign-in</h2><p className="text-slate-600 mt-2">{microsoftConnected ? `Connected as ${microsoftEmail}.` : "Shows where staff would sign in using their work Microsoft account."}</p><button onClick={openMicrosoftLogin} className="mt-4 w-full bg-[#0b4a56] text-white px-4 py-3 font-bold">{microsoftConnected ? "View Microsoft Connection" : "Connect Microsoft Account"}</button></div>
-        <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Teams</h2><p className="text-slate-600 mt-2">{threadMessages.length} messages in the selected Teams thread.</p><button className="mt-4 w-full bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-3 font-bold">Open Teams Thread</button></div>
-        <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Planner</h2><p className="text-slate-600 mt-2">{openPlannerTasks.length} open CRM tasks ready to sync with Planner.</p><button className="mt-4 w-full bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-3 font-bold">Sync Planner Tasks</button></div>
+        <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Teams</h2><p className="text-slate-600 mt-2">{threadMessages.length} messages in the selected Teams thread.</p><button onClick={openTeamsThread} className="mt-4 w-full bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-3 font-bold">Open Teams Thread</button></div>
+      </div>
+      <div className="bg-white border-2 border-[#bfd0d3] p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><p className="text-xs font-black uppercase text-slate-500">Connection</p><p className="font-black text-[#0b4a56]">{microsoftConnected ? "Microsoft connected" : "Demo connection only"}</p></div>
+        <div><p className="text-xs font-black uppercase text-slate-500">Activity</p><p className="font-black text-[#0b4a56]">{integrationNotice || "No recent Microsoft activity"}</p></div>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-6">
         <aside className="bg-white border border-slate-200 p-0 text-[#22383D] md:min-h-0">
           <div className="p-4 border-b border-[#d6dfdf]">
-            <h2 className="font-black text-xl text-[#0b4a56]">Staff & Channels</h2>
+            <h2 className="font-black text-xl text-[#0b4a56]">Teams Message Target</h2>
+            {staffLimitedMessaging && <p className="mt-2 text-sm text-slate-600">Staff accounts can message individual staff only. Department-wide and all-department broadcasts are management tools.</p>}
+            {!staffLimitedMessaging && !canBroadcastAllDepartments && <p className="mt-2 text-sm text-slate-600">Case workers can message departments or individuals. All-department broadcasts are management only.</p>}
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search staff..." className="w-full border border-slate-300 p-3 mt-3" />
           </div>
           <div className="p-4 border-b border-[#d6dfdf]">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Channels</p>
-            <div className="space-y-2">
-              {DEPARTMENT_CHANNELS.map((channel) => (
-                <button key={channel} onClick={() => setSelectedThread({ type: "channel", id: channel, name: channel, department: channel === "All departments" ? "Organization-wide" : channel })} className={`w-full text-left border px-3 py-2 ${selectedThread.type === "channel" && selectedThread.id === channel ? "bg-[#e8eeee] border-[#0b4a56]" : "bg-white border-[#d6dfdf]"}`}>
-                  <span className="font-bold text-[#0b4a56]"># {channel}</span>
-                </button>
-              ))}
-            </div>
+            <label className="block mb-3"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Send message to</span><select value={audienceScope} onChange={(e) => setAudienceScope(e.target.value)} className="w-full border border-slate-300 p-3 bg-white"><option value="all" disabled={!canBroadcastAllDepartments}>All departments</option><option value="certain">Certain department</option></select></label>
+            {audienceScope === "certain" && (
+              <div className="space-y-3">
+                <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Department</span><select value={departmentTarget} onChange={(e) => { setDepartmentTarget(e.target.value); const first = STAFF_DIRECTORY.find((member) => member.department === e.target.value && member.name !== user.name); if (first) setIndividualTarget(first.name); }} className="w-full border border-slate-300 p-3 bg-white">{DEPARTMENT_CHANNELS.filter((channel) => channel !== "All departments").map((channel) => <option key={channel}>{channel}</option>)}</select></label>
+                <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Recipient</span><select value={recipientMode} onChange={(e) => setRecipientMode(e.target.value)} className="w-full border border-slate-300 p-3 bg-white"><option value="department" disabled={staffLimitedMessaging}>Whole department</option><option value="individual">Select individual</option></select></label>
+                {recipientMode === "individual" && <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Staff member</span><select value={individualTarget} onChange={(e) => setIndividualTarget(e.target.value)} className="w-full border border-slate-300 p-3 bg-white">{departmentStaff.map((member) => <option key={member.name}>{member.name}</option>)}</select></label>}
+              </div>
+            )}
+            <button type="button" onClick={applyTeamsTarget} className="mt-4 w-full bg-[#0b4a56] text-white px-4 py-3 font-bold">Apply target</button>
           </div>
           <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">People</p>
+            <p className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Recent chats</p>
             <div className="space-y-2">
-              {staff.map((member) => (
+              {(search ? staff : recentChats.length ? recentChats : staff.slice(0, 5)).map((member) => (
                 <button key={member.name} onClick={() => setSelectedThread({ type: "person", id: member.name, name: member.name, department: member.department, role: member.role, status: member.status })} className={`w-full text-left border p-3 ${selectedThread.type === "person" && selectedThread.id === member.name ? "bg-[#e8eeee] border-[#0b4a56]" : "bg-white border-[#d6dfdf]"}`}>
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 bg-[#82c341] text-white flex items-center justify-center font-black">{member.name.split(" ").map((part) => part[0]).join("")}</div>
@@ -6497,7 +6649,7 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
           </div>
         </aside>
         <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-200 min-h-[620px] flex flex-col">
+        <div className={`bg-white border min-h-[620px] flex flex-col ${teamsPanelOpen ? "border-[#0b4a56] shadow-lg" : "border-slate-200"}`}>
           <div className="p-5 border-b border-[#d6dfdf] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h2 className="font-black text-2xl text-[#0b4a56]">{selectedThread.type === "channel" ? `# ${selectedThread.name}` : selectedThread.name}</h2>
@@ -6522,41 +6674,6 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
             <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Message {selectedThread.type === "channel" ? selectedThread.name : selectedThread.name}</span><textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder="Type a message..." className="w-full border border-slate-300 p-3 min-h-[90px]" /></label>
             <div className="flex justify-end mt-3"><button className="bg-slate-900 text-white px-5 py-3 font-semibold">Send message</button></div>
           </form>
-        </div>
-        <div className="bg-white border border-slate-200 min-h-[620px]">
-          <div className="p-5 border-b border-[#d6dfdf]">
-            <h2 className="font-black text-2xl text-[#0b4a56]">Planner Tasks</h2>
-            <p className="text-sm text-slate-600">CRM priority tasks shown as Microsoft Planner-style cards.</p>
-          </div>
-          <form onSubmit={createPlannerTask} className="p-5 border-b border-[#d6dfdf] grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="md:col-span-2"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Task title</span><input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Create Planner task..." className="w-full border border-slate-300 p-3" /></label>
-            <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Youth</span><input value={taskYouth} onChange={(e) => setTaskYouth(e.target.value)} placeholder="Youth name" className="w-full border border-slate-300 p-3" /></label>
-            <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Owner</span><select value={taskOwner} onChange={(e) => setTaskOwner(e.target.value)} className="w-full border border-slate-300 p-3"><option>Housing Team</option><option>Employment Services</option><option>Enterprise</option><option>Youth Hub</option><option>Justice Centre</option><option>Youth Centre</option><option>Job Board Team</option></select></label>
-            <button className="md:col-span-2 bg-[#0b4a56] text-white px-5 py-3 font-bold">Create Planner task</button>
-          </form>
-          <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {plannerBuckets.map((bucket) => (
-              <div key={bucket} className="border border-[#bfd0d3] bg-[#f8faf9] min-h-[220px]">
-                <div className="border-b border-[#bfd0d3] bg-white p-3"><h3 className="font-black text-[#0b4a56]">{bucket}</h3></div>
-                <div className="p-3 space-y-3">
-                  {tasks.filter((task) => task.status === bucket || (bucket === "Open" && task.status !== "Waiting" && task.status !== "Done")).map((task) => (
-                    <div key={task.id} className="bg-white border border-[#d6dfdf] p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-black text-[#0b4a56]">{task.title}</h4>
-                        <span className={`text-xs font-black uppercase ${task.priority === "High" ? "text-[#8a2f17]" : "text-slate-500"}`}>{task.priority}</span>
-                      </div>
-                      <p className="text-sm text-slate-600 mt-2">Youth: {task.youth}</p>
-                      <p className="text-sm text-slate-600">Owner: {task.owner}</p>
-                      <div className="mt-3 grid grid-cols-1 gap-2">
-                        <select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)} className="w-full border border-[#bfd0d3] p-2 text-sm"><option>Open</option><option>Waiting</option><option>Done</option></select>
-                        <button type="button" onClick={() => createTeamsFollowUp(task)} className="border border-[#0b4a56] text-[#0b4a56] bg-white px-3 py-2 text-sm font-bold">Draft Teams follow-up</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
         </div>
       </div>
@@ -6620,6 +6737,182 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
   );
 }
 
+function TaskPlanner({ tasks, setTasks, importantDates, setImportantDates }) {
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskYouth, setTaskYouth] = useState("");
+  const [taskOwner, setTaskOwner] = useState("Housing Team");
+  const [taskNote, setTaskNote] = useState("");
+  const [selectedTaskNote, setSelectedTaskNote] = useState(null);
+  const [dateTitle, setDateTitle] = useState("");
+  const [dateValue, setDateValue] = useState("");
+  const [dateOwner, setDateOwner] = useState("Housing Team");
+  const [dateNote, setDateNote] = useState("");
+  const [plannerSyncing, setPlannerSyncing] = useState(false);
+  const [plannerLastSync, setPlannerLastSync] = useState("Not synced yet");
+  const plannerBuckets = ["Open", "Waiting", "Done"];
+  const sortedDates = [...importantDates].sort((a, b) => a.date.localeCompare(b.date));
+  const upcomingDates = sortedDates.slice(0, 4);
+
+  function createPlannerTask(e) {
+    e.preventDefault();
+    if (!taskTitle.trim()) return;
+    setTasks([{
+      id: Date.now(),
+      title: taskTitle.trim(),
+      youth: taskYouth.trim() || "General",
+      owner: taskOwner,
+      due: dateValue || "New task",
+      note: taskNote.trim() || "No note recorded",
+      priority: "Medium",
+      status: "Open",
+      source: "Microsoft Planner",
+      plannerSynced: false,
+    }, ...tasks]);
+    setTaskTitle("");
+    setTaskYouth("");
+    setTaskNote("");
+    setPlannerLastSync("New task waiting to sync");
+  }
+
+  function updateTaskStatus(id, status) {
+    setTasks(tasks.map((task) => task.id === id ? { ...task, status, plannerSynced: false } : task));
+    setPlannerLastSync("Task status changed; sync recommended");
+  }
+
+  function syncPlannerTasks() {
+    setPlannerSyncing(true);
+    window.setTimeout(() => {
+      const syncedAt = new Date().toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      setTasks(tasks.map((task) => ({ ...task, plannerSynced: true, plannerId: task.plannerId || `PLN-${String(task.id).slice(-5)}` })));
+      setPlannerSyncing(false);
+      setPlannerLastSync(syncedAt);
+    }, 900);
+  }
+
+  function addImportantDate(e) {
+    e.preventDefault();
+    if (!dateTitle.trim() || !dateValue) return;
+    setImportantDates([{ id: Date.now(), title: dateTitle.trim(), date: dateValue, owner: dateOwner, note: dateNote.trim() || "No note recorded" }, ...importantDates]);
+    setDateTitle("");
+    setDateValue("");
+    setDateNote("");
+  }
+
+  function deleteImportantDate(id) {
+    setImportantDates(importantDates.filter((item) => item.id !== id));
+  }
+
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+        <div>
+          <p className="tracking-[0.28em] text-sm font-bold text-slate-500 uppercase">Microsoft Planner</p>
+          <h1 className="text-4xl font-black text-[#0b3f49]">Task Planner</h1>
+          <p className="text-slate-600">Manage CRM work, Planner sync, and important follow-up dates.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 min-w-[260px]">
+          <div className="bg-white border-2 border-[#bfd0d3] p-4"><p className="text-xs font-black uppercase text-slate-500">Open tasks</p><p className="text-2xl font-black text-[#0b4a56]">{tasks.filter((task) => task.status !== "Done").length}</p></div>
+          <div className="bg-white border-2 border-[#bfd0d3] p-4"><p className="text-xs font-black uppercase text-slate-500">Important dates</p><p className="text-2xl font-black text-[#0b4a56]">{importantDates.length}</p></div>
+        </div>
+      </div>
+
+      <div className="bg-white border-2 border-[#bfd0d3] p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div><p className="text-xs font-black uppercase text-slate-500">Planner status</p><p className="font-black text-[#0b4a56]">{plannerSyncing ? "Syncing..." : "Ready"}</p></div>
+        <div><p className="text-xs font-black uppercase text-slate-500">Last sync</p><p className="font-black text-[#0b4a56]">{plannerLastSync}</p></div>
+        <button onClick={syncPlannerTasks} disabled={plannerSyncing} className="bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-3 font-bold disabled:opacity-60">{plannerSyncing ? "Syncing Planner..." : "Sync Planner Tasks"}</button>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)] gap-6">
+        <div className="bg-white border-2 border-[#bfd0d3]">
+          <div className="p-5 border-b-2 border-[#bfd0d3] bg-[#e8eeee]">
+            <h2 className="font-black text-2xl text-[#0b4a56]">Planner Tasks</h2>
+            <p className="text-slate-600">CRM priority tasks shown as Microsoft Planner-style cards.</p>
+          </div>
+          <form onSubmit={createPlannerTask} className="p-5 border-b-2 border-[#bfd0d3] grid grid-cols-1 md:grid-cols-4 gap-3">
+            <label className="md:col-span-2"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Task title</span><input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Create Planner task..." className="w-full border-2 border-[#bfd0d3] p-3" /></label>
+            <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Youth</span><input value={taskYouth} onChange={(e) => setTaskYouth(e.target.value)} placeholder="Youth name" className="w-full border-2 border-[#bfd0d3] p-3" /></label>
+            <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Owner</span><select value={taskOwner} onChange={(e) => setTaskOwner(e.target.value)} className="w-full border-2 border-[#bfd0d3] p-3"><option>Housing Team</option><option>Employment Services</option><option>Enterprise</option><option>Youth Hub</option><option>Justice Centre</option><option>Youth Centre</option><option>Job Board Team</option></select></label>
+            <label className="md:col-span-4"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Task note</span><textarea value={taskNote} onChange={(e) => setTaskNote(e.target.value)} placeholder="Add task notes, context, or follow-up details..." className="w-full border-2 border-[#bfd0d3] p-3 min-h-[110px]" /></label>
+            <button className="md:col-span-4 bg-[#0b4a56] text-white px-5 py-3 font-bold">Create Planner task</button>
+          </form>
+          <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {plannerBuckets.map((bucket) => (
+              <div key={bucket} className="border-2 border-[#bfd0d3] bg-[#f8faf9] min-h-[260px]">
+                <div className="border-b-2 border-[#bfd0d3] bg-white p-3"><h3 className="font-black text-[#0b4a56]">{bucket}</h3></div>
+                <div className="p-3 space-y-3">
+                  {tasks.filter((task) => task.status === bucket || (bucket === "Open" && task.status !== "Waiting" && task.status !== "Done")).map((task) => (
+                    <div key={task.id} className="bg-white border border-[#d6dfdf] p-3">
+                      <div className="flex items-start justify-between gap-2"><h4 className="font-black text-[#0b4a56]">{task.title}</h4><span className={`text-xs font-black uppercase ${task.priority === "High" ? "text-[#8a2f17]" : "text-slate-500"}`}>{task.priority}</span></div>
+                      <p className="text-sm text-slate-600 mt-2">Youth: {task.youth}</p>
+                      <p className="text-sm text-slate-600">Owner: {task.owner}</p>
+                      <p className="text-sm text-slate-600">Due: {task.due}</p>
+                      <p className={`mt-2 text-xs font-black uppercase ${task.plannerSynced ? "text-green-700" : "text-slate-500"}`}>{task.plannerSynced ? `Synced ${task.plannerId}` : "Not synced"}</p>
+                      <button type="button" onClick={() => setSelectedTaskNote(task)} className="mt-3 w-full border border-[#0b4a56] bg-white px-3 py-2 text-sm font-bold text-[#0b4a56]">View notes</button>
+                      <select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)} className="mt-3 w-full border border-[#bfd0d3] p-2 text-sm"><option>Open</option><option>Waiting</option><option>Done</option></select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white border-2 border-[#bfd0d3]">
+            <div className="p-5 border-b-2 border-[#bfd0d3] bg-[#e8eeee]"><h2 className="font-black text-2xl text-[#0b4a56]">Important Dates</h2><p className="text-slate-600">Add follow-ups, meetings, and deadlines.</p></div>
+            <form onSubmit={addImportantDate} className="p-5 space-y-3">
+              <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Title</span><input value={dateTitle} onChange={(e) => setDateTitle(e.target.value)} placeholder="Important date title" className="w-full border-2 border-[#bfd0d3] p-3" /></label>
+              <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Date</span><input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="w-full border-2 border-[#bfd0d3] p-3" /></label>
+              <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Owner</span><select value={dateOwner} onChange={(e) => setDateOwner(e.target.value)} className="w-full border-2 border-[#bfd0d3] p-3"><option>Leadership</option><option>Housing Team</option><option>Employment Services</option><option>Enterprise</option><option>Youth Hub</option><option>Justice Centre</option><option>Youth Centre</option><option>Job Board Team</option></select></label>
+              <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Note</span><textarea value={dateNote} onChange={(e) => setDateNote(e.target.value)} placeholder="Add details..." className="w-full border-2 border-[#bfd0d3] p-3 min-h-[90px]" /></label>
+              <button className="w-full bg-[#0b4a56] text-white px-5 py-3 font-bold">Add important date</button>
+            </form>
+          </div>
+
+          <div className="bg-white border-2 border-[#bfd0d3] p-5">
+            <h3 className="font-black text-xl text-[#0b4a56] mb-4">Calendar</h3>
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-black uppercase text-slate-500 mb-2">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: 35 }, (_, index) => {
+                const day = index + 1;
+                const match = importantDates.find((item) => Number(item.date.slice(-2)) === day);
+                return <div key={day} className={`min-h-14 border p-2 text-sm ${match ? "bg-[#e8f5dc] border-[#82c341]" : "bg-[#f8faf9] border-[#d6dfdf]"}`}><p className="font-black text-[#0b4a56]">{day}</p>{match && <p className="text-[10px] leading-tight text-[#4f8f26]">{match.title}</p>}</div>;
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white border-2 border-[#bfd0d3] p-5">
+            <h3 className="font-black text-xl text-[#0b4a56] mb-4">Upcoming</h3>
+            <div className="space-y-3">
+              {upcomingDates.map((item) => <div key={item.id} className="border border-[#bfd0d3] p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-black text-[#0b4a56]">{item.title}</p><p className="text-sm text-slate-600">{item.date} • {item.owner}</p><p className="text-sm text-slate-700 mt-1">{item.note}</p></div><button onClick={() => deleteImportantDate(item.id)} className="border border-[#0b4a56] text-[#0b4a56] px-2 py-1 text-xs font-bold">Remove</button></div></div>)}
+            </div>
+          </div>
+        </div>
+      </div>
+      {selectedTaskNote && (
+        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-lg bg-white border-2 border-[#bfd0d3] shadow-2xl">
+            <div className="bg-[#e8eeee] border-b-2 border-[#bfd0d3] p-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Planner notes</p>
+                <h2 className="text-2xl font-black text-[#0b4a56]">{selectedTaskNote.title}</h2>
+              </div>
+              <button onClick={() => setSelectedTaskNote(null)} className="bg-white border-2 border-[#0b4a56] px-3 py-2 font-bold text-[#0b4a56]">Close</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <Rows data={{ Youth: selectedTaskNote.youth, Owner: selectedTaskNote.owner, Due: selectedTaskNote.due, Status: selectedTaskNote.status }} />
+              <div className="border-2 border-[#bfd0d3] bg-[#f8faf9] p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Note</p>
+                <p className="text-slate-800 whitespace-pre-wrap">{selectedTaskNote.note || "No note recorded"}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dashboard");
@@ -6627,6 +6920,7 @@ export default function App() {
   const [messages, setMessages] = useState(START_MESSAGES);
   const [tasks, setTasks] = useState(START_TASKS);
   const [teamsMessages, setTeamsMessages] = useState(START_COMMS);
+  const [importantDates, setImportantDates] = useState(START_IMPORTANT_DATES);
 
   if (!user) return <><style>{GOV_STYLE}</style><SignIn onLogin={setUser} /></>;
 
@@ -6640,6 +6934,7 @@ export default function App() {
           {page === "profiles" && <Profiles user={user} youth={youth} setYouth={setYouth} tasks={tasks} setTasks={setTasks} />}
           {page === "messages" && <Messages user={user} messages={messages} setMessages={setMessages} />}
           {page === "microsoft" && <Microsoft365Workspace user={user} teamsMessages={teamsMessages} setTeamsMessages={setTeamsMessages} tasks={tasks} setTasks={setTasks} />}
+          {page === "planner" && <TaskPlanner tasks={tasks} setTasks={setTasks} importantDates={importantDates} setImportantDates={setImportantDates} />}
         </main>
       </div>
     </>
