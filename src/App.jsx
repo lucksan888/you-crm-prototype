@@ -17,14 +17,14 @@ function YouLogo({ compact = false }) {
 }
 
 const USERS = [
-  { name: "Maya Chen", email: "manager@you.org", password: "manager123", role: "Management", department: "Leadership" },
-  { name: "Jordan Patel", email: "caseworker@you.org", password: "case123", role: "Case Worker", department: "Shelter" },
+  { name: "Jennifer Miller", email: "manager@you.org", password: "manager123", role: "Management", department: "Leadership" },
+  { name: "Jordan Patel", email: "caseworker@you.org", password: "case123", role: "Department Team Lead", department: "Shelter" },
   { name: "Sam Rivera", email: "employment@you.org", password: "job123", role: "Staff", department: "Employment Services" },
 ];
 
 const STAFF_DIRECTORY = [
-  { name: "Maya Chen", role: "Management", department: "Leadership", status: "Available" },
-  { name: "Jordan Patel", role: "Case Worker", department: "Housing", status: "Available" },
+  { name: "Jennifer Miller", role: "Management", department: "Leadership", status: "Available" },
+  { name: "Jordan Patel", role: "Department Team Lead", department: "Housing", status: "Available" },
   { name: "Sam Rivera", role: "Employment Specialist", department: "Employment Services", status: "In a meeting" },
   { name: "Avery Brooks", role: "Enterprise Coordinator", department: "Enterprise", status: "Available" },
   { name: "Priya Singh", role: "Youth Hub Worker", department: "Youth Hub", status: "Away" },
@@ -5754,7 +5754,7 @@ const START_YOUTH = [
 
 const START_MESSAGES = [
   { id: 1, from: "Jordan Patel", to: "Employment Services", youth: "Alex M.", subject: "Referral: resume support", body: "Alex has consented to employment services and wants resume support this week.", status: "Open" },
-  { id: 2, from: "Maya Chen", to: "Shelter Team", youth: "Brianna K.", subject: "Capacity check", body: "Please update waitlist priority after the next shelter capacity review.", status: "Pending" },
+  { id: 2, from: "Jennifer Miller", to: "Shelter Team", youth: "Brianna K.", subject: "Capacity check", body: "Please update waitlist priority after the next shelter capacity review.", status: "Pending" },
 ];
 
 const START_TASKS = [
@@ -5771,10 +5771,10 @@ const START_IMPORTANT_DATES = [
 ];
 
 const START_COMMS = [
-  { id: 1, threadId: "channel-All departments", from: "Maya Chen", department: "Leadership", audience: "All departments", subject: "Weekly case conference", body: "Please add priority youth and cross-department blockers before Thursday afternoon.", date: "May 11, 2026 9:30 AM" },
+  { id: 1, threadId: "channel-All departments", from: "Jennifer Miller", department: "Leadership", audience: "All departments", subject: "Weekly case conference", body: "Please add priority youth and cross-department blockers before Thursday afternoon.", date: "May 11, 2026 9:30 AM" },
   { id: 2, threadId: "person-Jordan Patel", from: "Jordan Patel", department: "Housing", audience: "Employment Services", subject: "Employment readiness for Alex M.", body: "Housing is stable this week. Please proceed with resume support and job board review.", date: "May 11, 2026 10:15 AM" },
   { id: 3, threadId: "channel-Housing", from: "Jordan Patel", department: "Housing", audience: "Housing", subject: "Waitlist review", body: "Brianna K. should stay high priority until transportation and placement risk are reviewed.", date: "May 11, 2026 10:40 AM" },
-  { id: 4, threadId: "person-Sam Rivera", from: "Sam Rivera", department: "Employment Services", audience: "Maya Chen", subject: "Job board shortlist", body: "I can shortlist entry-level postings for Chris T. before the next coaching session.", date: "May 11, 2026 11:05 AM" },
+  { id: 4, threadId: "person-Sam Rivera", from: "Sam Rivera", department: "Employment Services", audience: "Jennifer Miller", subject: "Job board shortlist", body: "I can shortlist entry-level postings for Chris T. before the next coaching session.", date: "May 11, 2026 11:05 AM" },
 ];
 
 const TREND = [
@@ -5791,7 +5791,7 @@ function isManagement(user) {
 }
 
 function isCaseWorker(user) {
-  return user?.role === "Case Worker";
+  return user?.role === "Department Team Lead" || user?.role === "Case Worker";
 }
 
 function isStaff(user) {
@@ -5809,6 +5809,20 @@ function canGrantSensitiveAccess(user) {
 function hasSensitiveAccess(user, profile) {
   if (!user || !profile) return false;
   return canView(user) || (profile.sensitiveAccess || []).includes(user.email);
+}
+
+function userServiceScope(user) {
+  if (!user || isManagement(user)) return "All departments";
+  if (user.department === "Shelter") return "Housing";
+  if (user.department === "Employment Services") return "Employment";
+  return user.department;
+}
+
+function taskBelongsToScope(task, user) {
+  if (!user || isManagement(user)) return true;
+  const scope = userServiceScope(user);
+  const haystack = `${task.owner || ""} ${task.title || ""} ${task.youth || ""}`.toLowerCase();
+  return haystack.includes(scope.toLowerCase()) || haystack.includes(user.department.toLowerCase()) || haystack.includes(user.name.toLowerCase());
 }
 
 function percent(profile) {
@@ -5952,7 +5966,7 @@ function SignIn({ onLogin }) {
         <div className="mt-6 text-sm text-slate-500 bg-slate-50 border border-[#d6dfdf] p-4">
           <p className="font-semibold text-slate-700">Demo logins</p>
           <p>Management: manager@you.org / manager123</p>
-          <p>Case Worker: caseworker@you.org / case123</p>
+          <p>Department Team Lead: caseworker@you.org / case123</p>
           <p>Staff: employment@you.org / job123</p>
         </div>
         </div>
@@ -5995,34 +6009,83 @@ function Sidebar({ user, page, setPage, onLogout }) {
   );
 }
 
-function Dashboard({ youth }) {
+function Dashboard({ user, youth, tasks, importantDates }) {
+  const [managementScope, setManagementScope] = useState("All departments");
+  const serviceScope = isManagement(user) ? managementScope : userServiceScope(user);
+  const scopedYouth = useMemo(() => {
+    if (serviceScope === "All departments") return youth;
+    return youth.filter((profile) => profile.programs.includes(serviceScope));
+  }, [youth, serviceScope]);
+  const scopedTasks = useMemo(() => {
+    if (isManagement(user) && serviceScope === "All departments") return tasks;
+    if (isManagement(user)) {
+      return tasks.filter((task) => {
+        const haystack = `${task.owner || ""} ${task.title || ""} ${task.youth || ""}`.toLowerCase();
+        return haystack.includes(serviceScope.toLowerCase());
+      });
+    }
+    return tasks.filter((task) => taskBelongsToScope(task, user));
+  }, [tasks, user, serviceScope]);
+  const today = new Date().toISOString().slice(0, 10);
+  const todayTasks = scopedTasks.filter((task) => task.status !== "Done" && String(task.due || "").toLowerCase().includes("today"));
+  const upcomingDates = importantDates.filter((item) => serviceScope === "All departments" || item.owner === user.department || item.owner === serviceScope || String(item.note || "").includes(serviceScope)).slice(0, 4);
   const stats = useMemo(() => {
+    const openTasks = scopedTasks.filter((task) => task.status !== "Done");
+    const completedTotal = scopedYouth.reduce((sum, profile) => sum + percent(profile), 0);
     return {
-      active: youth.filter((y) => y.status === "Active").length,
-      waitlist: youth.filter((y) => y.status === "Waitlist").length,
-      consent: youth.filter((y) => y.consent["Share Across Programs"]).length,
+      total: scopedYouth.length,
+      active: scopedYouth.filter((y) => y.status === "Active").length,
+      waitlist: scopedYouth.filter((y) => y.status === "Waitlist").length,
+      highRisk: scopedYouth.filter((y) => y.risk === "High").length,
+      consent: scopedYouth.filter((y) => y.consent["Share Across Programs"]).length,
+      averageCompletion: scopedYouth.length ? Math.round(completedTotal / scopedYouth.length) : 0,
+      openTasks: openTasks.length,
+      highTasks: openTasks.filter((task) => task.priority === "High").length,
       capacity: 87,
     };
-  }, [youth]);
+  }, [scopedYouth, scopedTasks]);
 
   const programData = SERVICE_TABS.map((program) => ({
     name: program,
-    value: youth.filter((y) => y.programs.includes(program)).length,
+    value: scopedYouth.filter((y) => y.programs.includes(program)).length,
+  }));
+
+  const departmentPrograms = serviceScope === "All departments" ? SERVICE_TABS : [serviceScope];
+  const departmentSummary = departmentPrograms.map((program) => ({
+    name: program,
+    profiles: youth.filter((profile) => profile.programs.includes(program)).length,
+    highRisk: youth.filter((profile) => profile.programs.includes(program) && profile.risk === "High").length,
   }));
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Analytics Dashboard</h1>
-        <p className="text-slate-500">Track intake, capacity, consent, and service activity.</p>
+      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Analytics Dashboard</h1>
+          <p className="text-slate-500">{isManagement(user) ? (serviceScope === "All departments" ? "Organization-wide view across all YOU departments." : `Management deep dive for ${serviceScope}.`) : `${serviceScope} dashboard for this login.`}</p>
+        </div>
+        <div className="bg-white border border-[#bfd0d3] px-4 py-3 min-w-[280px]">
+          <p className="text-xs font-black uppercase tracking-wide text-slate-500">Dashboard scope</p>
+          {isManagement(user) ? (
+            <select value={managementScope} onChange={(e) => setManagementScope(e.target.value)} className="mt-2 w-full border border-[#bfd0d3] bg-white p-2 font-black text-[#0b4a56]">
+              <option>All departments</option>
+              {SERVICE_TABS.map((service) => <option key={service}>{service}</option>)}
+            </select>
+          ) : <p className="font-black text-[#0b4a56]">{serviceScope}</p>}
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Stat title="Profiles in View" value={stats.total} />
         <Stat title="Active Youth" value={stats.active} />
         <Stat title="Waitlist" value={stats.waitlist} />
+        <Stat title="High Risk" value={stats.highRisk} />
         <Stat title="Cross-program Consent" value={stats.consent} />
-        <Stat title="Shelter Capacity" value={`${stats.capacity}%`} />
+        <Stat title="Avg Completion" value={`${stats.averageCompletion}%`} />
+        <Stat title="Open Tasks" value={stats.openTasks} />
+        <Stat title="High Priority Tasks" value={stats.highTasks} />
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6">
+        <div className="space-y-6">
         <Chart title="Monthly Intake Trend">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={TREND}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Line type="monotone" dataKey="intake" strokeWidth={3} /></LineChart>
@@ -6033,6 +6096,49 @@ function Dashboard({ youth }) {
             <BarChart data={programData}><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="value" radius={[8, 8, 0, 0]} /></BarChart>
           </ResponsiveContainer>
         </Chart>
+        {isManagement(user) && <Chart title={serviceScope === "All departments" ? "Department Risk Overview" : `${serviceScope} Risk Overview`}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={departmentSummary}><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="profiles" radius={[8, 8, 0, 0]} /><Bar dataKey="highRisk" radius={[8, 8, 0, 0]} /></BarChart>
+          </ResponsiveContainer>
+        </Chart>}
+        </div>
+        <div className="space-y-6">
+          <div className="bg-white p-6 border border-slate-200">
+            <div className="border-b border-[#d6dfdf] pb-3 mb-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Today</p>
+              <h2 className="font-black text-2xl text-[#0b4a56]">To-do List</h2>
+            </div>
+            <div className="space-y-3">
+              {todayTasks.length === 0 && <div className="border border-[#d6dfdf] bg-[#f8faf9] p-4 text-slate-600">No tasks marked due today for this dashboard scope.</div>}
+              {todayTasks.map((task) => (
+                <div key={task.id} className="border border-[#bfd0d3] p-4 bg-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-black text-[#0b4a56]">{task.title}</h3>
+                    <span className={`text-xs font-black uppercase ${task.priority === "High" ? "text-[#8a2f17]" : "text-slate-500"}`}>{task.priority}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-2">Youth: {task.youth}</p>
+                  <p className="text-sm text-slate-600">Owner: {task.owner}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white p-6 border border-slate-200">
+            <div className="border-b border-[#d6dfdf] pb-3 mb-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Calendar</p>
+              <h2 className="font-black text-2xl text-[#0b4a56]">Upcoming Dates</h2>
+            </div>
+            <div className="space-y-3">
+              {upcomingDates.length === 0 && <div className="border border-[#d6dfdf] bg-[#f8faf9] p-4 text-slate-600">No upcoming dates in this scope yet.</div>}
+              {upcomingDates.map((item) => (
+                <div key={item.id} className={`border p-4 ${item.date === today ? "border-[#82c341] bg-[#eef7e6]" : "border-[#bfd0d3] bg-white"}`}>
+                  <p className="font-black text-[#0b4a56]">{item.title}</p>
+                  <p className="text-sm text-slate-600 mt-1">{item.date} • {item.owner}</p>
+                  <p className="text-sm text-slate-700 mt-2">{item.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -6117,7 +6223,7 @@ function DepartmentNotesPanel({ activeTab, note, setNote, addDepartmentNote, sho
             <p className="text-xs text-slate-500 mt-2">{item.author} • {item.role}</p>
           </div>
         ))}
-      </div> : <div className="bg-white border border-[#bfd0d3] p-4 text-slate-700">Note history, case details, and sensitive comments are hidden for this role. A case worker or manager can grant profile-specific access.</div>}
+      </div> : <div className="bg-white border border-[#bfd0d3] p-4 text-slate-700">Note history, case details, and sensitive comments are hidden for this role. A department team lead or manager can grant profile-specific access.</div>}
     </div>
   );
 }
@@ -6128,6 +6234,7 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
   const [activeTab, setActiveTab] = useState("Vitals");
   const [showAdd, setShowAdd] = useState(false);
   const [summary, setSummary] = useState("");
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [note, setNote] = useState("");
@@ -6190,6 +6297,7 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
     setSelected(profile);
     setActiveTab("Vitals");
     setSummary("");
+    setShowSummaryModal(false);
     setShowAllNotes(false);
     setEditMode(mode === "edit");
     setEditForm({ ...profile });
@@ -6197,9 +6305,25 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
 
   function makeSummary(profile = selected) {
     if (!profile) return;
-    const latest = noteHistory(profile)[0]?.text || "No notes recorded";
     const allowed = hasSensitiveAccess(user, profile);
-    setSummary(`${profile.preferredName || profile.name} has a ${percent(profile)}% completed profile. Current state: ${profile.status}. Location: ${allowed ? profile.location : "restricted"}. Programs: ${profile.programs.join(", ")}. Goal: ${allowed ? (profile.goal || "not set") : "restricted by role"}. Consent: ${allowed ? (profile.consent["Share Across Programs"] ? "cross-program sharing allowed" : "limited sharing") : "restricted by role"}. Latest note: ${allowed ? latest : "restricted by role"}.`);
+    const readablePairs = (data) => Object.entries(data || {})
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "")
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("; ");
+    const visibleSections = Object.entries(profile.info || {})
+      .filter(([section]) => allowed || !["Contact Info", "Consent", "Case Note"].includes(section))
+      .map(([section, data]) => `${section} includes ${readablePairs(data) || "no recorded details"}.`);
+    const consentText = allowed
+      ? Object.entries(profile.consent || {}).map(([key, value]) => `${key} ${value ? "granted" : "not granted"}`).join(", ")
+      : "consent details are restricted for this login";
+    const notesText = allowed
+      ? (noteHistory(profile).slice(0, 3).map((item) => `${item.department}: ${item.text}`).join(" ") || "No notes are recorded.")
+      : "Note history is restricted for this login.";
+    const privacyText = allowed
+      ? `Contact and privacy details show phone ${profile.phone || "not recorded"}, email ${profile.email || "not recorded"}, safe contact method ${profile.safeContact || "not recorded"}, privacy level ${profile.privacy || "not recorded"}, and sensitive file flag ${profile.sensitiveFlag || "not recorded"}.`
+      : "Contact details, consent scope, goals, and sensitive note history are restricted until access is granted.";
+    setSummary(`${profile.preferredName || profile.name} (${profile.legalName || profile.name}) is a ${profile.age || "not recorded"} year old client with file number ${profile.fileNumber || "not recorded"}. The client is currently ${profile.status || "not recorded"}, assigned to ${profile.location || "not recorded"}, and connected to ${profile.programs?.join(", ") || "no recorded services"}. The profile is ${percent(profile)}% complete, with a ${profile.risk || "not recorded"} risk level. ${privacyText} Consent status: ${consentText}. The current goal is ${allowed ? (profile.goal || "not set") : "restricted by role"}. Recorded section information: ${visibleSections.join(" ")} Recent notes: ${notesText}`);
+    setShowSummaryModal(true);
   }
 
   function saveEdits() {
@@ -6385,18 +6509,18 @@ function Profiles({ user, youth, setYouth, tasks, setTasks }) {
 
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/50 p-4 md:p-8 overflow-y-auto">
-          <div className="max-w-7xl mx-auto bg-slate-100 p-5 md:p-8 border-2 border-[#bfd0d3] shadow-2xl space-y-6 relative">
+          <div className="max-w-7xl mx-auto bg-slate-100 p-5 md:p-8 border-2 border-[#bfd0d3] shadow-2xl flex flex-col gap-6 relative">
             <button onClick={() => { setSelected(null); setEditMode(false); }} className="absolute right-4 top-4 bg-[#0b4a56] text-white px-4 py-2 font-bold">Close</button>
-            <div className="bg-white border-2 border-[#bfd0d3] p-6">
+            <div className={`bg-white border-2 border-[#bfd0d3] p-6 ${isManagement(user) ? "order-2" : "order-1"}`}>
               <div className="flex flex-wrap gap-3 justify-end mb-4 pr-24"><button onClick={() => setEditMode(true)} className="border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-2 font-bold bg-white">Edit Profile</button><button onClick={() => makeSummary()} className="bg-[#0b4a56] text-white px-4 py-2 font-bold">Generate Summary</button></div>
               {editMode && <div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5 mb-6"><h3 className="font-black text-2xl text-[#0b4a56] mb-4">Edit Profile</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-3">{EDIT_FIELDS.map(([key, label]) => <CopyableInput key={key} label={label} value={editForm[key]} onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })} />)}<label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-[#0b4a56]">Client state</span><div className="flex gap-2"><select value={editForm.status || "Active"} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="w-full border-2 border-[#bfd0d3] p-3"><option>Active</option><option>Waitlist</option><option>Closed</option></select><CopyButton value={editForm.status || "Active"} /></div></label></div><div className="flex gap-3 mt-4"><button onClick={saveEdits} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Save changes</button><button onClick={() => setEditMode(false)} className="bg-white border-2 border-[#bfd0d3] px-5 py-3 font-bold text-[#0b4a56]">Cancel</button></div></div>}
               <p className="tracking-[0.35em] text-sm font-bold text-slate-500 uppercase">Youth Opportunities Unlimited</p><h2 className="text-4xl font-black text-[#0b3f49]">Client Summary Note</h2><p className="text-xl text-slate-700 mt-2">A client coordination summary generated from the completed record.</p>
               <div className="border-t-2 border-[#bfd0d3] mt-6 pt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Client Overview</h3><Rows data={{ "Legal Name": selected.legalName, "Preferred Name": selected.preferredName, "DOB / Age": `Not recorded / ${selected.age}`, Gender: selected.gender, Pronouns: selected.pronouns, "File Number": selected.fileNumber, "Client State": selected.status }} /></div><div className="bg-[#f3f7f7] border-2 border-[#bfd0d3] p-5"><h3 className="font-black text-2xl text-[#0b4a56] mb-6">Contact & Privacy</h3><Rows data={sensitiveContactData} /></div></div>
             </div>
-            {!canReadSelectedSensitive && <div className="bg-white p-5 border-2 border-[#bfd0d3]"><h3 className="font-black text-[#0b4a56]">Sensitive Access Restricted</h3><p className="text-slate-700 mt-1">This login can add profile updates and notes, but private contact details, consent details, goals, and note history stay hidden until a case worker or manager grants access for this specific profile.</p></div>}
-            {canGrantSensitiveAccess(user) && <div className="bg-white p-5 border-2 border-[#bfd0d3]"><h3 className="font-black text-[#0b4a56] mb-3">Sensitive Access Control</h3><div className="flex flex-col md:flex-row gap-3"><select value={grantTarget} onChange={(e) => setGrantTarget(e.target.value)} className="flex-1 border-2 border-[#bfd0d3] p-3 bg-white">{staffUsers.map((member) => <option key={member.email} value={member.email}>{member.name} - {member.role}</option>)}</select><button onClick={grantSensitiveAccess} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Grant profile access</button></div><p className="text-sm text-slate-600 mt-3">Authorized staff: {(selected.sensitiveAccess || []).length ? selected.sensitiveAccess.join(", ") : "None yet"}</p></div>}
-            {summary && <div className="bg-amber-50 p-5 border-2 border-amber-200"><h3 className="font-black text-[#0b4a56] mb-2">Generated Case Summary</h3><p className="text-slate-700">{summary}</p></div>}
-            <div className="bg-white border-2 border-[#bfd0d3]">
+            {!canReadSelectedSensitive && <div className={`bg-white p-5 border-2 border-[#bfd0d3] ${isManagement(user) ? "order-3" : "order-2"}`}><h3 className="font-black text-[#0b4a56]">Sensitive Access Restricted</h3><p className="text-slate-700 mt-1">This login can add profile updates and notes, but private contact details, consent details, goals, and note history stay hidden until a department team lead or manager grants access for this specific profile.</p></div>}
+            {canGrantSensitiveAccess(user) && <div className={`bg-white p-5 border-2 border-[#bfd0d3] ${isManagement(user) ? "order-4" : "order-3"}`}><h3 className="font-black text-[#0b4a56] mb-3">Sensitive Access Control</h3><div className="flex flex-col md:flex-row gap-3"><select value={grantTarget} onChange={(e) => setGrantTarget(e.target.value)} className="flex-1 border-2 border-[#bfd0d3] p-3 bg-white">{staffUsers.map((member) => <option key={member.email} value={member.email}>{member.name} - {member.role}</option>)}</select><button onClick={grantSensitiveAccess} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Grant profile access</button></div><p className="text-sm text-slate-600 mt-3">Authorized staff: {(selected.sensitiveAccess || []).length ? selected.sensitiveAccess.join(", ") : "None yet"}</p></div>}
+            {showSummaryModal && summary && <div className="fixed inset-0 z-[60] bg-black/50 p-4 md:p-8 flex items-center justify-center"><div className="relative w-full max-w-2xl max-h-[78vh] bg-white border-2 border-[#bfd0d3] shadow-2xl flex flex-col"><div className="absolute right-4 top-4 z-10 flex items-center gap-2"><CopyButton value={summary} label="Copy" /><button onClick={() => setShowSummaryModal(false)} className="bg-white border-2 border-[#0b4a56] px-3 py-2 font-bold text-[#0b4a56]">Close</button></div><div className="bg-[#f3f7f7] border-b-2 border-[#bfd0d3] p-5 pr-48"><p className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Generated from profile</p><h3 className="text-2xl font-black text-[#0b4a56]">Client Summary</h3><p className="text-sm text-slate-600 mt-1">Readable paragraph pulled from the current profile record.</p></div><div className="p-5 overflow-y-auto"><p className="text-slate-800 leading-7 text-base">{summary}</p></div><div className="border-t border-[#bfd0d3] p-4 flex justify-end bg-white"><button onClick={() => setShowSummaryModal(false)} className="bg-[#0b4a56] text-white px-5 py-3 font-bold">Done</button></div></div></div>}
+            <div className={`bg-white border-2 border-[#bfd0d3] ${isManagement(user) ? "order-1" : "order-4"}`}>
               <div className="flex flex-wrap border-b-2 border-[#bfd0d3]">{TABS.map((tab) => <button key={tab} onClick={() => { setActiveTab(tab); setShowAllNotes(false); }} className={`px-6 py-4 font-black text-lg border-r-2 border-[#bfd0d3] ${activeTab === tab ? "bg-white text-[#0b4a56]" : "bg-[#e8eeee] text-[#0b4a56]"}`}>{tab}</button>)}</div>
               <div className="p-6 space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><h3 className="text-2xl font-black text-[#0b4a56]">{activeTab}</h3><p className="text-slate-600">Only the selected department section is shown here.</p></div><button onClick={() => markComplete(activeTab)} className="bg-[#0b4a56] text-white px-4 py-3 font-bold">Mark section complete</button></div>
@@ -6440,7 +6564,7 @@ function Messages({ user, messages, setMessages }) {
 function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, setTasks }) {
   const staffLimitedMessaging = isStaff(user);
   const canBroadcastAllDepartments = isManagement(user);
-  const [selectedThread, setSelectedThread] = useState(staffLimitedMessaging ? { type: "person", id: "Jordan Patel", name: "Jordan Patel", department: "Housing", role: "Case Worker", status: "Available" } : { type: "channel", id: "All departments", name: "All departments", department: "Organization-wide" });
+  const [selectedThread, setSelectedThread] = useState(staffLimitedMessaging ? { type: "person", id: "Jordan Patel", name: "Jordan Patel", department: "Housing", role: "Department Team Lead", status: "Available" } : { type: "channel", id: "All departments", name: "All departments", department: "Organization-wide" });
   const [messageText, setMessageText] = useState("");
   const [search, setSearch] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -6930,7 +7054,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row">
         <Sidebar user={user} page={page} setPage={setPage} onLogout={() => setUser(null)} />
         <main className="flex-1 p-6 md:p-8 overflow-y-auto">
-          {page === "dashboard" && <Dashboard youth={youth} />}
+          {page === "dashboard" && <Dashboard user={user} youth={youth} tasks={tasks} importantDates={importantDates} />}
           {page === "profiles" && <Profiles user={user} youth={youth} setYouth={setYouth} tasks={tasks} setTasks={setTasks} />}
           {page === "messages" && <Messages user={user} messages={messages} setMessages={setMessages} />}
           {page === "microsoft" && <Microsoft365Workspace user={user} teamsMessages={teamsMessages} setTeamsMessages={setTeamsMessages} tasks={tasks} setTasks={setTasks} />}
