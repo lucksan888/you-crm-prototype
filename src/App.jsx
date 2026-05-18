@@ -6583,6 +6583,38 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
   const [departmentTarget, setDepartmentTarget] = useState("Housing");
   const [recipientMode, setRecipientMode] = useState(staffLimitedMessaging ? "individual" : "department");
   const [individualTarget, setIndividualTarget] = useState("Jordan Patel");
+  const [m365App, setM365App] = useState("hub");
+  const [teamsView, setTeamsView] = useState("teams");
+  const [selectedTeamsDetail, setSelectedTeamsDetail] = useState(null);
+  const [teamsCalendarMeetings, setTeamsCalendarMeetings] = useState([
+    { id: "mtg-11", day: 11, title: "Coordination meeting", time: "10:00 AM", owner: "Jennifer Miller", notes: "Review cross-department support requests and urgent follow-ups." },
+    { id: "mtg-16", day: 16, title: "Housing priority review", time: "1:30 PM", owner: "Jordan Patel", notes: "Confirm housing waitlist updates and Brianna K. priority task." },
+    { id: "mtg-21", day: 21, title: "Employment coaching check-in", time: "3:00 PM", owner: "Sam Rivera", notes: "Review job board readiness and employer outreach tasks." },
+  ]);
+  const [m365Notice, setM365Notice] = useState("");
+  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [formAnswers, setFormAnswers] = useState({
+    requestingTeam: user.department,
+    receivingTeam: "",
+    requestType: "",
+    priority: "Medium",
+    timeline: "",
+    notes: "",
+    privacy: "",
+  });
+  const [plannerView, setPlannerView] = useState("myDay");
+  const [sharePointSection, setSharePointSection] = useState("Home");
+  const [sharePointSearch, setSharePointSearch] = useState("");
+  const [selectedSharePointFile, setSelectedSharePointFile] = useState(null);
+  const [sharePointPreviewOpen, setSharePointPreviewOpen] = useState(false);
+  const [sharePointCopied, setSharePointCopied] = useState(false);
+  const [selectedListRequest, setSelectedListRequest] = useState(null);
+  const [listRows, setListRows] = useState([
+    ["REQ-001", "Housing", "Employment Services", "Employment Support", "Jordan Patel", "In Progress", "High", "Today"],
+    ["REQ-002", "Youth Hub", "Housing", "Housing Support", "Priya Singh", "Waiting", "Medium", "May 18"],
+    ["REQ-003", "Justice Centre", "Youth Hub", "Service Coordination", "Daniel Okafor", "Assigned", "High", "May 20"],
+    ["REQ-004", "Employment Services", "SharePoint", "Document Update", "Sam Rivera", "Completed", "Low", "May 15"],
+  ]);
 
   const staff = STAFF_DIRECTORY.filter((member) => member.name !== user.name && `${member.name} ${member.role} ${member.department}`.toLowerCase().includes(search.toLowerCase()));
   const departmentStaff = STAFF_DIRECTORY.filter((member) => member.department === departmentTarget && member.name !== user.name);
@@ -6720,123 +6752,384 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
     }
   }
 
-  return (
-    <section className="space-y-6">
-      <div>
-        <p className="tracking-[0.28em] text-sm font-bold text-slate-500 uppercase">Microsoft 365 Integration</p>
-        <h1 className="text-4xl font-black text-[#0b3f49]">Teams Workspace</h1>
-        <p className="text-slate-600">Prototype view for staff chat, department channels, and Microsoft account connection.</p>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Microsoft Sign-in</h2><p className="text-slate-600 mt-2">{microsoftConnected ? `Connected as ${microsoftEmail}.` : "Shows where staff would sign in using their work Microsoft account."}</p><button onClick={openMicrosoftLogin} className="mt-4 w-full bg-[#0b4a56] text-white px-4 py-3 font-bold">{microsoftConnected ? "View Microsoft Connection" : "Connect Microsoft Account"}</button></div>
-        <div className="bg-white border-2 border-[#bfd0d3] p-5"><h2 className="font-black text-xl text-[#0b4a56]">Teams</h2><p className="text-slate-600 mt-2">{threadMessages.length} messages in the selected Teams thread.</p><button onClick={openTeamsThread} className="mt-4 w-full bg-white border-2 border-[#0b4a56] text-[#0b4a56] px-4 py-3 font-bold">Open Teams Thread</button></div>
-      </div>
-      <div className="bg-white border-2 border-[#bfd0d3] p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div><p className="text-xs font-black uppercase text-slate-500">Connection</p><p className="font-black text-[#0b4a56]">{microsoftConnected ? "Microsoft connected" : "Demo connection only"}</p></div>
-        <div><p className="text-xs font-black uppercase text-slate-500">Activity</p><p className="font-black text-[#0b4a56]">{integrationNotice || "No recent Microsoft activity"}</p></div>
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-6">
-        <aside className="bg-white border border-slate-200 p-0 text-[#22383D] md:min-h-0">
-          <div className="p-4 border-b border-[#d6dfdf]">
-            <h2 className="font-black text-xl text-[#0b4a56]">Teams Message Target</h2>
-            {staffLimitedMessaging && <p className="mt-2 text-sm text-slate-600">Staff accounts can message individual staff only. Department-wide and all-department broadcasts are management tools.</p>}
-            {!staffLimitedMessaging && !canBroadcastAllDepartments && <p className="mt-2 text-sm text-slate-600">Case workers can message departments or individuals. All-department broadcasts are management only.</p>}
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search staff..." className="w-full border border-slate-300 p-3 mt-3" />
-          </div>
-          <div className="p-4 border-b border-[#d6dfdf]">
-            <label className="block mb-3"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Send message to</span><select value={audienceScope} onChange={(e) => setAudienceScope(e.target.value)} className="w-full border border-slate-300 p-3 bg-white"><option value="all" disabled={!canBroadcastAllDepartments}>All departments</option><option value="certain">Certain department</option></select></label>
-            {audienceScope === "certain" && (
-              <div className="space-y-3">
-                <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Department</span><select value={departmentTarget} onChange={(e) => { setDepartmentTarget(e.target.value); const first = STAFF_DIRECTORY.find((member) => member.department === e.target.value && member.name !== user.name); if (first) setIndividualTarget(first.name); }} className="w-full border border-slate-300 p-3 bg-white">{DEPARTMENT_CHANNELS.filter((channel) => channel !== "All departments").map((channel) => <option key={channel}>{channel}</option>)}</select></label>
-                <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Recipient</span><select value={recipientMode} onChange={(e) => setRecipientMode(e.target.value)} className="w-full border border-slate-300 p-3 bg-white"><option value="department" disabled={staffLimitedMessaging}>Whole department</option><option value="individual">Select individual</option></select></label>
-                {recipientMode === "individual" && <label className="block"><span className="block mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Staff member</span><select value={individualTarget} onChange={(e) => setIndividualTarget(e.target.value)} className="w-full border border-slate-300 p-3 bg-white">{departmentStaff.map((member) => <option key={member.name}>{member.name}</option>)}</select></label>}
+  const appRail = [
+    ["hub", "⌂", "Hub"],
+    ["teams", "T", "Teams"],
+    ["planner", "□", "Planner"],
+    ["forms", "F", "Forms"],
+    ["lists", "L", "Lists"],
+    ["sharepoint", "S", "SharePoint"],
+  ];
+  const teamsRailItems = [
+    ["activity", "●", "Activity"],
+    ["chat", "✉", "Chat"],
+    ["teams", "#", "Teams"],
+    ["calendar", "▦", "Calendar"],
+    ["calls", "☎", "Calls"],
+    ["apps", "+", "Apps"],
+  ];
+  const plannerColumns = ["Open", "Waiting", "Done"];
+  const sharePointSections = ["Home", "Service Directory", "Referral Pathways", "Program Contacts", "Templates & Forms", "Policies & Procedures", "Program Updates"];
+  const sharePointResources = {
+    Home: [
+      { title: "Weekly operations briefing", type: "News post", owner: "Jennifer Miller", updated: "Today", summary: "Current priorities, urgent service updates, and cross-department reminders for YOU teams." },
+      { title: "High-priority service contacts", type: "Pinned list", owner: "Leadership", updated: "May 17", summary: "Quick links to department leads, escalation contacts, and after-hours supports." },
+      { title: "New staff onboarding pack", type: "Folder", owner: "People & Culture", updated: "May 15", summary: "Orientation documents, role expectations, and CRM workflow guidance." },
+    ],
+    "Service Directory": [
+      { title: "Housing service directory", type: "Excel list", owner: "Housing Team", updated: "May 16", summary: "Shelters, transitional housing, eligibility notes, and referral contacts for London, Ontario." },
+      { title: "Employment and Job Board contacts", type: "SharePoint list", owner: "Employment Services", updated: "May 14", summary: "Job readiness services, employer partners, and job board intake contacts." },
+      { title: "Youth Hub drop-in schedule", type: "PDF", owner: "Youth Hub", updated: "May 12", summary: "Drop-in hours, program calendar, and navigation support availability." },
+    ],
+    "Referral Pathways": [
+      { title: "Housing referral pathway", type: "Process map", owner: "Housing Team", updated: "May 17", summary: "Step-by-step workflow for intake, consent, eligibility, waitlist, and placement follow-up." },
+      { title: "Justice Centre referral checklist", type: "Checklist", owner: "Justice Centre", updated: "May 11", summary: "Consent, case context, court dates, and service coordination requirements before referral." },
+      { title: "Cross-program consent pathway", type: "Guide", owner: "Leadership", updated: "May 8", summary: "When teams can share information and when additional youth consent is required." },
+    ],
+    "Program Contacts": [
+      { title: "Department team lead roster", type: "Contact list", owner: "Leadership", updated: "Today", summary: "Current team leads, availability, Teams contacts, and escalation notes by department." },
+      { title: "Community partner directory", type: "Excel list", owner: "Youth Hub", updated: "May 13", summary: "Approved partner agencies, warm referral contacts, and service notes." },
+      { title: "After-hours contact protocol", type: "Policy note", owner: "Management", updated: "May 5", summary: "Who to contact for urgent housing, safety, and service coordination matters." },
+    ],
+    "Templates & Forms": [
+      { title: "Internal support request form", type: "Form template", owner: "Operations", updated: "Today", summary: "Template used for requests between departments in the Microsoft Forms tab." },
+      { title: "Case conference agenda", type: "Word template", owner: "Leadership", updated: "May 10", summary: "Meeting structure for cross-department youth support planning." },
+      { title: "Consent follow-up script", type: "Word template", owner: "Case Practice", updated: "May 7", summary: "Plain-language script for explaining consent and information sharing." },
+    ],
+    "Policies & Procedures": [
+      { title: "Privacy and sensitive information policy", type: "Policy", owner: "Management", updated: "May 16", summary: "Access expectations for sensitive information, consent, and role-based viewing." },
+      { title: "Referral documentation procedure", type: "Procedure", owner: "Operations", updated: "May 9", summary: "Minimum documentation required before sending a referral across departments." },
+      { title: "Planner task accountability standard", type: "Procedure", owner: "Leadership", updated: "May 6", summary: "How tasks are assigned, updated, synced, and reviewed in weekly operations." },
+    ],
+    "Program Updates": [
+      { title: "Housing capacity update", type: "News post", owner: "Housing Team", updated: "Today", summary: "Current capacity notes and urgent waitlist considerations." },
+      { title: "Job Board employer outreach update", type: "News post", owner: "Job Board Team", updated: "May 15", summary: "New employer leads, upcoming hiring events, and youth readiness opportunities." },
+      { title: "Youth Centre spring programming", type: "Announcement", owner: "Youth Centre", updated: "May 12", summary: "Upcoming groups, program start dates, and participation notes." },
+    ],
+  };
+  const currentSharePointFiles = (sharePointResources[sharePointSection] || []).filter((item) => `${item.title} ${item.type} ${item.owner} ${item.summary}`.toLowerCase().includes(sharePointSearch.toLowerCase()));
+  const teamsActivityItems = [
+    { title: "Program update posted", source: "SharePoint", body: "A new program update is available in the SharePoint operations hub.", action: "Open SharePoint" },
+    { title: "New reply in coordination thread", source: "Teams", body: "A staff member replied to the cross-service coordination channel.", action: "Open Teams thread" },
+    { title: "File shared in SharePoint", source: "SharePoint", body: "A service document was shared for internal review.", action: "Review file" },
+    { title: "Planner task assigned", source: "Planner", body: "A CRM follow-up was assigned in the Planner board.", action: "Open Planner" },
+  ];
+
+  function showM365Notice(message) {
+    setM365Notice(message);
+    window.setTimeout(() => setM365Notice(""), 2800);
+  }
+
+  function createDemoPlannerTask(title = "New Microsoft Planner task") {
+    setTasks([{ id: Date.now(), title, youth: "General", owner: user.department, due: "New task", priority: "Medium", status: "Open", source: "Microsoft Planner" }, ...tasks]);
+    setM365App("planner");
+    showM365Notice("Planner task added to the CRM task board.");
+  }
+
+  function addListRequest() {
+    const nextId = `REQ-${String(listRows.length + 1).padStart(3, "0")}`;
+    setListRows([[nextId, user.department, "Housing", "Service Coordination", user.name, "New", "Medium", "Today"], ...listRows]);
+    showM365Notice("New Microsoft Lists request added.");
+  }
+
+  function openListRequest(row) {
+    setSelectedListRequest(row);
+    showM365Notice(`${row[0]} opened.`);
+  }
+
+  function updateFormAnswer(field, value) {
+    setFormAnswers({ ...formAnswers, [field]: value });
+    if (formSubmitted) setFormSubmitted(false);
+  }
+
+  function submitSupportRequest(e) {
+    e.preventDefault();
+    const nextId = `REQ-${String(listRows.length + 1).padStart(3, "0")}`;
+    setListRows([[
+      nextId,
+      formAnswers.requestingTeam || user.department,
+      formAnswers.receivingTeam || "Not selected",
+      formAnswers.requestType || "Service Coordination",
+      user.name,
+      "New",
+      formAnswers.priority || "Medium",
+      formAnswers.timeline || "Not set",
+    ], ...listRows]);
+    setFormSubmitted(true);
+    showM365Notice("Form submitted. A Microsoft Lists request was created.");
+  }
+
+  function openSharePointResource(item) {
+    setSelectedSharePointFile(item);
+    setSharePointPreviewOpen(false);
+    setSharePointCopied(false);
+    showM365Notice(`${item.title} opened in SharePoint.`);
+  }
+
+  function copySharePointLink() {
+    const linkText = `https://you.sharepoint.com/sites/internal-hub/${sharePointSection.toLowerCase().replaceAll(" ", "-")}/${selectedSharePointFile.title.toLowerCase().replaceAll(" ", "-")}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(linkText);
+    }
+    setSharePointCopied(true);
+    showM365Notice("SharePoint link copied.");
+  }
+
+  function openTeamsDetail(detail) {
+    setSelectedTeamsDetail(detail);
+    showM365Notice(`${detail.title} opened.`);
+  }
+
+  function createTeamsMeetingDraft() {
+    const newMeeting = {
+      id: `mtg-${Date.now()}`,
+      day: 18,
+      title: "New coordination meeting",
+      time: "2:00 PM",
+      owner: user.name,
+      notes: "Draft meeting created from the Teams calendar.",
+    };
+    setTeamsCalendarMeetings([newMeeting, ...teamsCalendarMeetings]);
+    setSelectedTeamsDetail({ type: "Meeting", title: newMeeting.title, body: `${newMeeting.time} on May ${newMeeting.day}. Owner: ${newMeeting.owner}. ${newMeeting.notes}`, action: "Added to calendar" });
+  }
+
+  function openTeamsApp(app) {
+    const appRoutes = { Planner: "planner", Forms: "forms", Lists: "lists", SharePoint: "sharepoint" };
+    if (appRoutes[app]) {
+      setM365App(appRoutes[app]);
+      showM365Notice(`${app} opened from Teams apps.`);
+      return;
+    }
+    openTeamsDetail({ type: "App", title: app, body: `${app} can be added as a Teams app in this prototype workspace.`, action: "Add to Teams" });
+  }
+
+  function renderPlannerMain() {
+    const todayTasks = tasks.filter((task) => task.due === "Today");
+    if (plannerView === "myDay") {
+      return (
+        <main className="min-w-0 flex-1 bg-white">
+          <div className="h-20 border-b border-[#e1dfdd] px-8 flex items-center"><h3 className="text-xl font-semibold">My day</h3></div>
+          <div className="p-8">
+            <div className="flex items-center justify-between rounded border border-[#e1dfdd] bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-5">
+                <div className="text-center text-sm font-semibold text-[#605e5c]"><p>{new Date().toLocaleDateString([], { weekday: "short" }).toUpperCase()}</p><p className="text-3xl text-[#242424]">{new Date().getDate()}</p><p>{new Date().toLocaleDateString([], { month: "short" }).toUpperCase()}</p></div>
+                <div className="grid h-14 w-14 place-items-center rounded-full bg-[#efe9ff] text-3xl">☀</div>
+                <div><h3 className="text-2xl font-semibold">Good afternoon</h3><p className="text-[#605e5c]">Take a moment to recharge and reset.</p></div>
+              </div>
+              <p className="font-semibold">{todayTasks.length} tasks planned for today</p>
+            </div>
+            <div className="mt-6 flex gap-2"><button className="rounded-full border-2 border-[#5b5fc7] px-5 py-2 font-semibold text-[#5b5fc7]">▦ Grid</button><button onClick={() => setPlannerView("coordination")} className="rounded-full border border-[#d0d0d0] px-5 py-2 text-[#605e5c]">Board</button></div>
+            {todayTasks.length ? (
+              <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-3">{todayTasks.map((task) => <div key={task.id} className="border border-[#e1dfdd] p-4"><p className="font-semibold">{task.title}</p><p className="mt-1 text-sm text-[#605e5c]">{task.youth} • {task.owner}</p></div>)}</div>
+            ) : (
+              <div className="mt-24 text-center">
+                <div className="mx-auto mb-6 grid h-28 w-28 place-items-center rounded-full bg-[#f6f0ff] text-5xl">☀</div>
+                <h3 className="text-xl font-semibold">Let's create your first task</h3>
+                <p className="mt-2 text-[#605e5c]">Tasks assigned to you that are due today also appear here.</p>
+                <button onClick={() => createDemoPlannerTask("New task for today")} className="mt-6 rounded bg-[#5b5fc7] px-5 py-3 font-semibold text-white">+ Add new task</button>
               </div>
             )}
-            <button type="button" onClick={applyTeamsTarget} className="mt-4 w-full bg-[#0b4a56] text-white px-4 py-3 font-bold">Apply target</button>
           </div>
-          <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Recent chats</p>
-            <div className="space-y-2">
-              {(search ? staff : recentChats.length ? recentChats : staff.slice(0, 5)).map((member) => (
-                <button key={member.name} onClick={() => setSelectedThread({ type: "person", id: member.name, name: member.name, department: member.department, role: member.role, status: member.status })} className={`w-full text-left border p-3 ${selectedThread.type === "person" && selectedThread.id === member.name ? "bg-[#e8eeee] border-[#0b4a56]" : "bg-white border-[#d6dfdf]"}`}>
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-[#82c341] text-white flex items-center justify-center font-black">{member.name.split(" ").map((part) => part[0]).join("")}</div>
-                    <div>
-                      <p className="font-black text-[#0b4a56]">{member.name}</p>
-                      <p className="text-sm text-slate-600">{member.role}</p>
-                      <p className="text-xs text-slate-500">{member.department} • {member.status}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+        </main>
+      );
+    }
+    if (plannerView === "myTasks") {
+      return (
+        <main className="min-w-0 flex-1 bg-white">
+          <div className="h-20 border-b border-[#e1dfdd] px-8 flex items-center justify-between"><h3 className="text-xl font-semibold">My tasks</h3><button onClick={() => createDemoPlannerTask("New assigned task")} className="rounded bg-[#5b5fc7] px-4 py-2 font-semibold text-white">+ Add task</button></div>
+          <div className="p-8 space-y-3">{tasks.map((task) => <div key={task.id} className="grid grid-cols-[1fr_160px_130px] gap-4 border border-[#e1dfdd] p-4"><div><p className="font-semibold">{task.title}</p><p className="text-sm text-[#605e5c]">{task.youth}</p></div><p>{task.owner}</p><select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)} className="border border-[#c8c6c4] p-2"><option>Open</option><option>Waiting</option><option>Done</option></select></div>)}</div>
+        </main>
+      );
+    }
+    if (plannerView === "myPlans") {
+      return (
+        <main className="min-w-0 flex-1 bg-[#fafafa]">
+          <div className="h-20 border-b border-[#e1dfdd] bg-white px-8 flex items-center"><h3 className="text-xl font-semibold">My plans</h3></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-8">{["YOU Coordination Plan", "Housing Follow-ups", "Employment Supports"].map((plan) => <button key={plan} onClick={() => setPlannerView(plan === "YOU Coordination Plan" ? "coordination" : "myTasks")} className="bg-white border border-[#e1dfdd] p-5 text-left shadow-sm hover:border-[#5b5fc7]"><div className="mb-4 h-2 w-20 rounded bg-[#5b5fc7]" /><p className="font-semibold">{plan}</p><p className="mt-2 text-sm text-[#605e5c]">Open plan</p></button>)}</div>
+        </main>
+      );
+    }
+    return (
+      <main className="min-w-0 flex-1"><div className="h-16 bg-white border-b border-[#e1dfdd] px-6 flex items-center justify-between"><h3 className="text-xl font-semibold text-[#5b5fc7]">YOU Cross-Department Coordination Plan</h3><button onClick={syncPlannerTasks} className="bg-[#5b3fd3] text-white px-4 py-2 font-semibold">{plannerSyncing ? "Syncing..." : "Sync Planner"}</button></div><div className="flex gap-4 overflow-x-auto p-5">{plannerColumns.map((bucket) => <div key={bucket} className="w-[280px] shrink-0"><p className="mb-3 font-semibold text-[#5b5fc7]">{bucket}</p>{tasks.filter((task) => task.status === bucket).map((task) => <div key={task.id} className="mb-3 bg-white border border-[#e1dfdd] p-4 shadow-sm"><div className="mb-3 h-1.5 w-16 bg-[#5b5fc7]" /><p className="font-semibold">{task.title}</p><p className="mt-2 text-xs text-[#605e5c]">{task.youth} • {task.owner}</p><select value={task.status} onChange={(e) => updateTaskStatus(task.id, e.target.value)} className="mt-3 w-full border border-[#c8c6c4] p-2"><option>Open</option><option>Waiting</option><option>Done</option></select><button onClick={() => createTeamsFollowUp(task)} className="mt-2 text-sm font-semibold text-[#5b5fc7]">Draft Teams follow-up</button></div>)}<button onClick={() => createDemoPlannerTask(`New ${bucket.toLowerCase()} task`)} className="text-sm text-[#605e5c]">+ Add task</button></div>)}</div></main>
+    );
+  }
+
+  function renderM365Screen() {
+    if (m365App === "hub") {
+      return (
+        <div className="h-full overflow-y-auto bg-[#f8f8fb] p-6">
+          <div className="bg-white border border-[#e1dfdd] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#605e5c]">YOU Microsoft 365 Coordination Hub</p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#5b5fc7]">Connected apps for communication, planning, requests, and shared knowledge</h2>
+            <p className="mt-2 max-w-4xl text-[#605e5c]">This workspace shows how Teams, Planner, Forms, Lists, and SharePoint can sit inside the CRM as a coordinated Microsoft 365 side tab.</p>
           </div>
-        </aside>
-        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
-        <div className={`bg-white border min-h-[620px] flex flex-col ${teamsPanelOpen ? "border-[#0b4a56] shadow-lg" : "border-slate-200"}`}>
-          <div className="p-5 border-b border-[#d6dfdf] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h2 className="font-black text-2xl text-[#0b4a56]">{selectedThread.type === "channel" ? `# ${selectedThread.name}` : selectedThread.name}</h2>
-              <p className="text-sm text-slate-600">{selectedThread.role ? `${selectedThread.role} • ${selectedThread.department} • ${selectedThread.status}` : selectedThread.department}</p>
-            </div>
-            <span className="border border-[#bfd0d3] bg-[#f3f7f7] px-3 py-2 text-sm font-bold">{threadMessages.length} messages</span>
-          </div>
-          <div className="flex-1 p-5 space-y-4 overflow-y-auto bg-[#f8faf9]">
-            {threadMessages.length === 0 && <div className="bg-white border border-[#d6dfdf] p-5 text-slate-600">No messages in this thread yet.</div>}
-            {threadMessages.slice().reverse().map((item) => (
-              <div key={item.id} className={`border border-[#d6dfdf] p-4 max-w-3xl ${item.from === user.name ? "ml-auto bg-[#fff3ec]" : "bg-white"}`}>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 mb-2">
-                  <p className="font-black text-[#0b4a56]">{item.from}</p>
-                  <p className="text-xs text-slate-500">{item.date}</p>
-                </div>
-                <p className="text-sm text-slate-500 mb-2">{item.department}</p>
-                <p className="text-slate-800">{item.body}</p>
-              </div>
+          <div className="mt-5 grid grid-cols-1 lg:grid-cols-5 gap-3">
+            {appRail.filter(([id]) => id !== "hub").map(([id, icon, label]) => (
+              <button key={id} onClick={() => setM365App(id)} className="bg-white border border-[#e1dfdd] p-4 text-left hover:border-[#5b5fc7]">
+                <div className="mb-3 grid h-10 w-10 place-items-center bg-[#5b5fc7] text-white font-bold">{icon}</div>
+                <p className="font-semibold text-[#242424]">{label}</p>
+                <p className="text-sm text-[#605e5c] mt-1">{label === "Teams" ? "Chats, channels, calendar, and calls" : label === "Planner" ? "Tasks and accountability" : label === "Forms" ? "Structured internal requests" : label === "Lists" ? "Track requests and status" : "Shared knowledge hub"}</p>
+              </button>
             ))}
           </div>
-          <form onSubmit={sendChat} className="p-5 border-t border-[#d6dfdf] bg-white">
-            <label><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Message {selectedThread.type === "channel" ? selectedThread.name : selectedThread.name}</span><textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder="Type a message..." className="w-full border border-slate-300 p-3 min-h-[90px]" /></label>
-            <div className="flex justify-end mt-3"><button className="bg-slate-900 text-white px-5 py-3 font-semibold">Send message</button></div>
-          </form>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-3">
+            {[[threadMessages.length, "Messages in selected thread"], [openPlannerTasks.length, "Open CRM tasks"], [listRows.filter((row) => row[5] !== "Completed").length, "Open requests"], [microsoftConnected ? "Ready" : "Demo", "Connection status"]].map(([value, label]) => (
+              <div key={label} className="bg-white border border-[#e1dfdd] p-4"><p className="text-2xl font-semibold text-[#5b5fc7]">{value}</p><p className="text-sm text-[#605e5c]">{label}</p></div>
+            ))}
+          </div>
         </div>
+      );
+    }
+
+    if (m365App === "teams") {
+      return (
+        <div className="flex h-full bg-white text-[#242424]">
+          <aside className="w-[230px] shrink-0 border-r border-[#e1dfdd] bg-[#f7f7f7]">
+            <div className="h-14 px-4 flex items-center justify-between border-b border-[#e1dfdd]"><h3 className="font-semibold text-lg text-[#5b5fc7]">Teams</h3><button onClick={() => showM365Notice("New Teams channel draft opened.")} className="text-[#5b5fc7] font-bold">+</button></div>
+            <div className="p-3 space-y-1">
+              {teamsRailItems.map(([id, icon, label]) => <button key={id} onClick={() => setTeamsView(id)} className={`w-full flex items-center gap-3 px-3 py-3 text-left rounded ${teamsView === id ? "bg-[#ecebff] text-[#242424] font-semibold" : "text-[#605e5c] hover:bg-[#eeeeee]"}`}><span className="grid h-6 w-6 place-items-center text-[#5b5fc7]">{icon}</span>{label}</button>)}
+            </div>
+          </aside>
+          {teamsView === "chat" ? (
+            <>
+              <aside className="w-[300px] shrink-0 border-r border-[#e1dfdd] bg-[#fafafa] p-3">
+                <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-semibold text-[#5b5fc7]">Chat</h3><button onClick={() => showM365Notice("New chat started. Select a staff member to continue.")} className="text-[#5b5fc7] font-bold">+</button></div>
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" className="mb-3 w-full border border-[#c8c6c4] px-3 py-2" />
+                {(search ? staff : recentChats.length ? recentChats : staff.slice(0, 6)).map((member) => (
+                  <button key={member.name} onClick={() => setSelectedThread({ type: "person", id: member.name, name: member.name, department: member.department, role: member.role, status: member.status })} className={`mb-1 flex w-full gap-3 rounded px-3 py-3 text-left ${selectedThread.id === member.name ? "bg-[#ecebff]" : "hover:bg-[#eeeeee]"}`}>
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-[#5b5fc7] text-white text-xs font-bold">{member.name.split(" ").map((part) => part[0]).join("")}</div>
+                    <div><p className="font-semibold">{member.name}</p><p className="text-sm text-[#605e5c]">{member.department}</p></div>
+                  </button>
+                ))}
+              </aside>
+              <main className="min-w-0 flex-1 flex flex-col">
+                <div className="h-14 border-b border-[#e1dfdd] px-5 flex items-center justify-between"><div><p className="font-semibold text-[#5b5fc7]">{selectedThread.name}</p><p className="text-xs text-[#605e5c]">{selectedThread.role || selectedThread.department}</p></div><div className="flex gap-3 text-[#5b5fc7]"><button onClick={() => showM365Notice(`Calling ${selectedThread.name}...`)}>☎</button><button onClick={() => showM365Notice(`Starting video with ${selectedThread.name}...`)}>◉</button></div></div>
+                <div className="flex-1 overflow-y-auto bg-[#fafafa] p-5 space-y-3">{threadMessages.length === 0 && <div className="bg-white border border-[#e1dfdd] p-4">No messages yet.</div>}{threadMessages.slice().reverse().map((item) => <div key={item.id} className={`max-w-2xl rounded border border-[#e1dfdd] p-4 ${item.from === user.name ? "ml-auto bg-[#e8ebfa]" : "bg-white"}`}><p className="font-semibold">{item.from}</p><p className="mt-1 text-sm">{item.body}</p><p className="mt-2 text-xs text-[#605e5c]">{item.date}</p></div>)}</div>
+                <form onSubmit={sendChat} className="border-t border-[#e1dfdd] bg-white p-4"><textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={`Message ${selectedThread.name}`} className="min-h-[74px] w-full border border-[#c8c6c4] p-3" /><div className="mt-2 flex justify-end"><button className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">Send</button></div></form>
+              </main>
+            </>
+          ) : teamsView === "calendar" ? (
+            <main className="flex-1 bg-white p-5"><div className="flex items-center justify-between border-b border-[#e1dfdd] pb-4"><h3 className="text-2xl font-semibold text-[#5b5fc7]">Calendar</h3><button onClick={createTeamsMeetingDraft} className="bg-[#5b5fc7] px-4 py-2 text-white font-semibold">New meeting</button></div><div className="mt-5 grid grid-cols-7 border border-[#e1dfdd]">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day) => <div key={day} className="border-r border-b border-[#e1dfdd] p-3 font-semibold text-[#5b5fc7]">{day}</div>)}{Array.from({ length: 35 }, (_, i) => { const day = i + 1; const meetings = teamsCalendarMeetings.filter((meeting) => meeting.day === day); return <div key={day} className="min-h-[90px] border-r border-b border-[#e1dfdd] p-2 text-sm"><span>{day}</span>{meetings.map((meeting) => <button key={meeting.id} onClick={() => openTeamsDetail({ type: "Meeting", title: meeting.title, body: `${meeting.time} on May ${meeting.day}. Owner: ${meeting.owner}. ${meeting.notes}`, action: "Open meeting notes" })} className="mt-2 block w-full rounded bg-[#e6e2ff] p-2 font-semibold text-left">{meeting.title}</button>)}</div>; })}</div></main>
+          ) : teamsView === "activity" ? (
+            <main className="flex-1 bg-[#f5f5f5] p-5"><h3 className="text-2xl font-semibold mb-4 text-[#5b5fc7]">Activity</h3>{teamsActivityItems.map((item) => <button key={item.title} onClick={() => openTeamsDetail({ type: item.source, title: item.title, body: item.body, action: item.action })} className="mb-3 block w-full bg-white border border-[#e1dfdd] p-4 text-left hover:border-[#5b5fc7]"><p className="font-semibold">{item.title}</p><p className="text-sm text-[#605e5c]">{item.source} • {item.body}</p></button>)}</main>
+          ) : (
+            teamsView === "calls" ? <main className="flex-1 bg-white p-5"><h3 className="text-2xl font-semibold text-[#5b5fc7]">Calls</h3><div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">{staff.slice(0, 6).map((member) => <button key={member.name} onClick={() => openTeamsDetail({ type: "Call", title: `Call with ${member.name}`, body: `${member.name} is ${member.status.toLowerCase()} in ${member.department}. This would start a Teams audio call in the real integration.`, action: "Start call" })} className="block w-full border border-[#e1dfdd] p-4 text-left hover:border-[#5b5fc7]"><p className="font-semibold">{member.name}</p><p className="text-sm text-[#605e5c]">{member.department} • {member.status}</p><p className="mt-3 text-sm font-semibold text-[#5b5fc7]">Start call</p></button>)}</div></main> : teamsView === "apps" ? <main className="flex-1 bg-[#f5f5f5] p-5"><h3 className="text-2xl font-semibold text-[#5b5fc7]">Apps</h3><div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">{["Planner", "Forms", "Lists", "SharePoint", "Approvals", "OneNote", "Bookings", "Power Automate"].map((app) => <button key={app} onClick={() => openTeamsApp(app)} className="bg-white border border-[#e1dfdd] p-4 text-left font-semibold hover:border-[#5b5fc7]">{app}<p className="mt-1 text-sm font-normal text-[#605e5c]">{["Planner", "Forms", "Lists", "SharePoint"].includes(app) ? "Open app" : "Add to Teams"}</p></button>)}</div></main> : <main className="min-w-0 flex-1 flex flex-col"><div className="h-14 border-b border-[#e1dfdd] px-5 flex items-center justify-between"><h3 className="text-xl font-semibold text-[#5b5fc7]"># Cross-Service Coordination</h3><button onClick={openTeamsThread} className="text-[#5b5fc7] font-semibold">Open thread</button></div><div className="flex h-11 gap-6 border-b border-[#e1dfdd] px-5 text-sm"><button onClick={() => showM365Notice("Posts tab selected.")} className="border-b-2 border-[#5b5fc7] py-3 font-semibold">Posts</button><button onClick={() => openSharePointResource(sharePointResources.Home[0])} className="py-3">Files</button><button onClick={() => openTeamsDetail({ type: "Notes", title: "Channel notes", body: "Shared notes for the cross-service coordination channel.", action: "Open notes" })} className="py-3">Notes</button></div><div className="flex-1 overflow-y-auto bg-[#fafafa] p-5 space-y-3">{threadMessages.length === 0 && <div className="bg-white border p-4">No channel messages yet.</div>}{threadMessages.slice().reverse().map((item) => <div key={item.id} className="bg-white border border-[#e1dfdd] p-4"><p className="font-semibold">{item.from} <span className="ml-2 text-xs font-normal text-[#605e5c]">{item.date}</span></p><p className="mt-2 text-sm">{item.body}</p></div>)}</div><form onSubmit={sendChat} className="border-t border-[#e1dfdd] bg-white p-4"><textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder="Start a new conversation" className="min-h-[74px] w-full border border-[#c8c6c4] p-3" /><div className="mt-2 flex justify-end"><button className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">Post</button></div></form></main>
+          )}
+        </div>
+      );
+    }
+
+    if (m365App === "planner") {
+      return (
+        <div className="flex h-full bg-[#fafafa]">
+          <aside className="w-[260px] shrink-0 border-r border-[#e1dfdd] bg-white">
+            <div className="border-b border-[#e1dfdd] px-5 py-4 flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded bg-gradient-to-br from-[#5b5fc7] to-[#8a3ffc] text-white font-bold">✓</span><span className="font-semibold text-[#5b5fc7]">Planner</span></div>
+            <div className="p-4">
+              <button onClick={() => { createDemoPlannerTask("New cross-department plan task"); setPlannerView("coordination"); }} className="mb-6 flex w-full items-center justify-between rounded bg-[#5b5fc7] px-4 py-3 text-white font-semibold"><span>+ Create a plan</span><span className="border-l border-white/40 pl-3">⌄</span></button>
+              {[
+                ["myDay", "☼", "My day"],
+                ["myTasks", "☑", "My tasks"],
+                ["myPlans", "▦", "My plans"],
+                ["coordination", "", "YOU Coordination Plan"],
+              ].map(([id, icon, label]) => (
+                <button key={id} onClick={() => { setPlannerView(id); showM365Notice(`${label} opened.`); }} className={`mb-2 flex w-full items-center gap-3 rounded px-3 py-3 text-left ${plannerView === id ? "border border-[#0078d4] bg-[#f3f2f1] font-semibold text-[#242424]" : "text-[#605e5c] hover:bg-[#f7f7f7]"}`}>
+                  {icon && <span className="w-6 text-center text-[#5b5fc7]">{icon}</span>}
+                  <span>{label}</span>
+                </button>
+              ))}
+              <div className="mt-8 text-sm text-[#605e5c]"><p className="mb-3 font-semibold">Pinned</p><p>Pinned items will appear here.</p></div>
+            </div>
+          </aside>
+          {renderPlannerMain()}
+        </div>
+      );
+    }
+
+    if (m365App === "forms") return <div className="h-full overflow-y-auto bg-[#f3f2f1]"><div className="m365-app-header bg-[#5b5fc7] px-6 py-4 text-white"><h3 className="text-xl font-semibold">Forms</h3><p className="text-sm">Cross-Department Support Request Form</p></div><form onSubmit={submitSupportRequest} className="mx-auto my-6 max-w-5xl bg-white shadow-sm"><div className="border-t-8 border-[#5b5fc7] p-8"><h3 className="text-3xl font-semibold text-[#5b5fc7]">Internal Support Request</h3><p className="mt-3 text-[#605e5c]">Submit structured requests when another department needs to help with a youth or workflow.</p></div><div className="space-y-5 p-8">{formSubmitted && <div className="border border-[#107c10] bg-[#dff6dd] p-4 font-semibold text-[#107c10]">Form submitted. A matching Lists item was created.</div>}{[
+      ["requestingTeam", "Requesting team", "Enter your answer", "input"],
+      ["receivingTeam", "Support needed from which team?", "Enter your answer", "input"],
+      ["requestType", "Request type", "Enter your answer", "input"],
+      ["priority", "Priority level", "Enter priority", "select"],
+      ["timeline", "Preferred timeline", "Enter your answer", "input"],
+      ["notes", "Notes or context", "Enter your answer", "textarea"],
+      ["privacy", "Privacy confirmation", "Enter your answer", "textarea"],
+    ].map(([field, question, placeholder, type], i) => <label key={field} className="block border border-[#d0d0d0] bg-white p-6"><span className="block text-xl font-semibold text-[#242424]">{i + 1}. {question}</span>{type === "select" ? <select value={formAnswers[field]} onChange={(e) => updateFormAnswer(field, e.target.value)} className="mt-5 w-full border-0 border-b border-[#605e5c] bg-transparent px-0 py-3 text-lg focus:outline-none focus:ring-0"><option>Low</option><option>Medium</option><option>High</option></select> : type === "textarea" ? <textarea value={formAnswers[field]} onChange={(e) => updateFormAnswer(field, e.target.value)} placeholder={placeholder} className="mt-5 min-h-[90px] w-full resize-y border-0 border-b border-[#605e5c] bg-transparent px-0 py-3 text-lg focus:outline-none focus:ring-0" /> : <input value={formAnswers[field]} onChange={(e) => updateFormAnswer(field, e.target.value)} placeholder={placeholder} className="mt-5 w-full border-0 border-b border-[#605e5c] bg-transparent px-0 py-3 text-lg focus:outline-none focus:ring-0" />}</label>)}<button className="bg-[#5b5fc7] px-6 py-3 font-semibold text-white">Submit request</button></div></form></div>;
+
+    if (m365App === "lists") return <div className="h-full bg-white"><div className="h-14 border-b px-6 flex items-center justify-between"><div><h3 className="text-xl font-semibold text-[#5b5fc7]">Internal Request Tracker</h3><p className="text-xs text-[#605e5c]">Microsoft Lists</p></div><button onClick={addListRequest} className="text-[#5b5fc7] font-semibold">+ New</button></div><div className="p-5 overflow-x-auto"><table className="w-full border-collapse text-sm"><thead><tr className="bg-[#fafafa] border-b text-left">{["Request ID","Requesting Team","Receiving Team","Type","Owner","Status","Priority","Due"].map((head) => <th key={head} className="px-3 py-3 font-semibold text-[#5b5fc7]">{head}</th>)}</tr></thead><tbody>{listRows.map((row) => <tr key={row[0]} onClick={() => openListRequest(row)} className="border-b hover:bg-[#f3f2f1] cursor-pointer">{row.map((cell, i) => <td key={`${row[0]}-${i}`} className="px-3 py-3">{i === 5 ? <span className="bg-[#deecf9] px-2 py-1 text-xs text-[#004578]">{cell}</span> : i === 6 ? <span className={`px-2 py-1 text-xs ${cell === "High" ? "bg-[#fde7e9] text-[#a4262c]" : cell === "Medium" ? "bg-[#fff4ce] text-[#8a6d1d]" : "bg-[#f3f2f1]"}`}>{cell}</span> : cell}</td>)}</tr>)}</tbody></table></div></div>;
+
+    return <div className="h-full bg-white"><div className="bg-[#f3f2f1] px-8 py-6"><p className="text-sm text-[#605e5c]">YOU Internal Hub</p><h3 className="text-3xl font-semibold text-[#5b5fc7]">SharePoint Knowledge & Operations Hub</h3><p className="mt-2 max-w-3xl text-sm text-[#605e5c]">Central source of truth for service information, referral pathways, contacts, templates, policies, and updates.</p></div><div className="grid h-[calc(100%-132px)] grid-cols-[240px_1fr]"><aside className="border-r p-4 text-sm text-[#605e5c]">{sharePointSections.map((item) => <button key={item} onClick={() => { setSharePointSection(item); setSharePointSearch(""); showM365Notice(`${item} opened in SharePoint.`); }} className={`mb-1 block w-full rounded px-3 py-3 text-left ${sharePointSection === item ? "bg-[#edebe9] text-[#242424] font-semibold" : "hover:bg-[#f3f2f1]"}`}>{item}</button>)}</aside><main className="overflow-y-auto p-6"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h4 className="text-2xl font-semibold text-[#5b5fc7]">{sharePointSection}</h4><p className="mt-1 text-sm text-[#605e5c]">{currentSharePointFiles.length} approved resources available</p></div><div className="flex gap-2"><input value={sharePointSearch} onChange={(e) => setSharePointSearch(e.target.value)} placeholder="Search this hub" className="border border-[#c8c6c4] px-3 py-2" /><button onClick={() => showM365Notice("Upload panel opened for demo purposes.")} className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">Upload</button></div></div><div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">{sharePointSections.filter((item) => item !== "Home").map((item) => <button key={item} onClick={() => { setSharePointSection(item); setSharePointSearch(""); showM365Notice(`${item} opened in SharePoint.`); }} className="border border-[#e1dfdd] bg-white p-4 shadow-sm text-left hover:border-[#5b5fc7]"><div className="mb-3 grid h-9 w-9 place-items-center bg-[#5b5fc7] text-white">S</div><p className="font-semibold">{item}</p><p className="mt-1 text-sm text-[#605e5c]">{sharePointResources[item]?.length || 0} resources</p></button>)}</div><div className="mt-6 border border-[#e1dfdd] bg-[#fafafa]"><div className="border-b border-[#e1dfdd] px-4 py-3 font-semibold text-[#5b5fc7]">{sharePointSection} files</div>{currentSharePointFiles.map((item) => <button key={item.title} onClick={() => openSharePointResource(item)} className="grid w-full grid-cols-[1fr_140px_140px] gap-4 border-b border-[#e1dfdd] bg-white px-4 py-4 text-left hover:bg-[#f3f2f1]"><div><p className="font-semibold text-[#242424]">{item.title}</p><p className="mt-1 text-sm text-[#605e5c]">{item.summary}</p></div><p className="text-sm text-[#605e5c]">{item.owner}</p><p className="text-sm text-[#605e5c]">{item.updated}</p></button>)}{currentSharePointFiles.length === 0 && <div className="bg-white p-5 text-[#605e5c]">No resources match that search.</div>}</div></main></div></div>;
+  }
+
+  return (
+    <section className="space-y-6">
+      <style>{`
+        .m365-workspace h2,
+        .m365-workspace h3,
+        .m365-workspace h4,
+        .m365-workspace .m365-title {
+          color: #5b5fc7 !important;
+        }
+        .m365-workspace .m365-topbar *,
+        .m365-workspace .m365-app-header h3,
+        .m365-workspace .m365-app-header p {
+          color: #ffffff !important;
+        }
+        .m365-modal h2,
+        .m365-modal h3,
+        .m365-modal .m365-modal-title {
+          color: #5b5fc7 !important;
+        }
+      `}</style>
+      <div className="m365-workspace overflow-hidden border border-[#d0d0d0] bg-white shadow-sm">
+        <div className="m365-topbar flex h-12 items-center justify-between bg-[#464775] px-5 text-white">
+          <div className="flex items-center gap-3"><div className="grid h-7 w-7 place-items-center bg-white/15 font-bold">M</div><span className="font-semibold">{m365App === "hub" ? "Microsoft 365" : m365App === "teams" ? "Microsoft Teams" : m365App === "planner" ? "Planner" : m365App === "forms" ? "Forms" : m365App === "lists" ? "Lists" : "SharePoint"}</span></div>
+          <div className="hidden w-[420px] bg-white/95 px-3 py-1.5 text-sm text-[#605e5c] lg:block">Search across Microsoft 365</div>
+          <button onClick={openMicrosoftLogin} className="bg-white/15 px-3 py-1.5 text-sm font-semibold">{microsoftConnected ? "Connected" : "Connect Microsoft"}</button>
+        </div>
+        {m365Notice && <div className="border-b border-[#d0d0d0] bg-[#e8ebfa] px-5 py-2 text-sm font-semibold text-[#464775]">{m365Notice}</div>}
+        <div className="flex h-[760px] min-h-[760px]">
+          <aside className="w-[86px] shrink-0 bg-[#ebebeb] border-r border-[#d0d0d0] py-2">
+            {appRail.map(([id, icon, label]) => <button key={id} onClick={() => setM365App(id)} className={`mb-1 flex w-full flex-col items-center gap-1 px-1 py-3 text-[11px] ${m365App === id ? "bg-white text-[#5b5fc7] font-semibold" : "text-[#605e5c] hover:bg-[#f7f7f7]"}`}><span className="grid h-7 w-7 place-items-center rounded bg-[#5b5fc7] text-white text-xs font-bold">{icon}</span>{label}</button>)}
+          </aside>
+          <main className="min-w-0 flex-1">{renderM365Screen()}</main>
         </div>
       </div>
       {showMicrosoftLogin && (
         <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-          <div className="w-full max-w-xl bg-white border-2 border-[#bfd0d3] shadow-2xl">
-            <div className="bg-[#f3f7f7] border-b-2 border-[#bfd0d3] p-5 flex items-start justify-between gap-4">
+          <div className="w-full max-w-xl bg-white border border-[#d0d0d0] shadow-2xl">
+            <div className="bg-[#464775] border-b border-[#d0d0d0] p-5 flex items-start justify-between gap-4 text-white">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Microsoft 365</p>
-                <h2 className="text-2xl font-black text-[#0b4a56]">{connectStep === "connected" ? "Account Connected" : "Connect your account"}</h2>
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-white/80">Microsoft 365</p>
+                <h2 className="text-2xl font-black">{connectStep === "connected" ? "Account Connected" : "Connect your account"}</h2>
               </div>
-              <button onClick={() => setShowMicrosoftLogin(false)} className="bg-white border-2 border-[#0b4a56] px-3 py-2 font-bold text-[#0b4a56]">Close</button>
+              <button onClick={() => setShowMicrosoftLogin(false)} className="bg-white px-3 py-2 font-bold text-[#464775]">Close</button>
             </div>
             <form onSubmit={continueMicrosoftLogin} className="p-6 space-y-5">
               {connectStep === "login" && (
                 <>
-                  <div className="border-2 border-[#bfd0d3] p-4">
-                    <h3 className="font-black text-xl text-[#0b4a56]">Sign in</h3>
+                  <div className="border border-[#d0d0d0] p-4">
+                    <h3 className="font-black text-xl text-[#5b5fc7]">Sign in</h3>
                     <p className="text-slate-600 mt-1">This is a demo Microsoft login window for the prototype.</p>
                   </div>
-                  <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Microsoft email</span><input value={microsoftEmail} onChange={(e) => setMicrosoftEmail(e.target.value)} className="w-full border-2 border-[#bfd0d3] p-3" /></label>
-                  <label className="block"><span className="block mb-1 text-sm font-bold text-[#0F4E5B]">Password</span><input type="password" value="demo-password" readOnly className="w-full border-2 border-[#bfd0d3] p-3 bg-slate-50" /></label>
-                  <button className="w-full bg-[#0b4a56] text-white px-5 py-3 font-bold">Sign in</button>
+                  <label className="block"><span className="block mb-1 text-sm font-bold text-[#5b5fc7]">Microsoft email</span><input value={microsoftEmail} onChange={(e) => setMicrosoftEmail(e.target.value)} className="w-full border border-[#8a8886] p-3" /></label>
+                  <label className="block"><span className="block mb-1 text-sm font-bold text-[#5b5fc7]">Password</span><input type="password" value="demo-password" readOnly className="w-full border border-[#8a8886] p-3 bg-slate-50" /></label>
+                  <button className="w-full bg-[#5b5fc7] text-white px-5 py-3 font-bold">Sign in</button>
                 </>
               )}
               {connectStep === "permissions" && (
                 <>
-                  <div className="border-2 border-[#bfd0d3] p-4">
-                    <h3 className="font-black text-xl text-[#0b4a56]">Permissions requested</h3>
+                  <div className="border border-[#d0d0d0] p-4">
+                    <h3 className="font-black text-xl text-[#5b5fc7]">Permissions requested</h3>
                     <p className="text-slate-600 mt-1">YOU CRM would ask Microsoft for permission to connect Teams and Planner.</p>
                   </div>
                   {["Read staff directory", "Read and send Teams messages", "Create and update Planner tasks", "View Planner task status"].map((item) => <div key={item} className="flex items-center justify-between border-b border-[#bfd0d3] py-3"><span className="font-bold text-slate-800">{item}</span><span className="text-green-700 font-black">Allowed</span></div>)}
-                  <button className="w-full bg-[#0b4a56] text-white px-5 py-3 font-bold">Allow and connect</button>
+                  <button className="w-full bg-[#5b5fc7] text-white px-5 py-3 font-bold">Allow and connect</button>
                 </>
               )}
               {connectStep === "connecting" && (
                 <div className="text-center py-10">
-                  <div className="mx-auto mb-5 h-16 w-16 border-4 border-[#bfd0d3] border-t-[#82c341] rounded-full animate-spin" />
-                  <h3 className="font-black text-2xl text-[#0b4a56]">Connecting to Microsoft...</h3>
+                  <div className="mx-auto mb-5 h-16 w-16 border-4 border-[#e8ebfa] border-t-[#5b5fc7] rounded-full animate-spin" />
+                  <h3 className="font-black text-2xl text-[#5b5fc7]">Connecting to Microsoft...</h3>
                   <p className="text-slate-600 mt-2">Checking Teams access and syncing Planner task boards.</p>
                 </div>
               )}
@@ -6850,10 +7143,106 @@ function Microsoft365Workspace({ user, teamsMessages, setTeamsMessages, tasks, s
                     <div className="border-2 border-[#bfd0d3] p-4"><p className="text-xs font-black uppercase text-slate-500">Teams</p><p className="font-black text-[#0b4a56]">Ready</p></div>
                     <div className="border-2 border-[#bfd0d3] p-4"><p className="text-xs font-black uppercase text-slate-500">Planner</p><p className="font-black text-[#0b4a56]">Ready</p></div>
                   </div>
-                  <button type="button" onClick={() => setShowMicrosoftLogin(false)} className="w-full bg-[#0b4a56] text-white px-5 py-3 font-bold">Done</button>
+                  <button type="button" onClick={() => setShowMicrosoftLogin(false)} className="w-full bg-[#5b5fc7] text-white px-5 py-3 font-bold">Done</button>
                 </>
               )}
             </form>
+          </div>
+        </div>
+      )}
+      {selectedTeamsDetail && (
+        <div onClick={() => setSelectedTeamsDetail(null)} className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <div onClick={(e) => e.stopPropagation()} className="m365-modal w-full max-w-lg bg-white border border-[#d0d0d0] shadow-2xl">
+            <div className="bg-[#464775] p-5 text-white flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/75">{selectedTeamsDetail.type}</p>
+                <h2 className="text-2xl font-bold text-white">{selectedTeamsDetail.title}</h2>
+              </div>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedTeamsDetail(null); }} className="bg-white px-3 py-2 font-semibold text-[#464775]">Close</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="leading-7 text-[#242424]">{selectedTeamsDetail.body}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">Source</p><p className="font-semibold">{selectedTeamsDetail.type}</p></div>
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">Action</p><p className="font-semibold">{selectedTeamsDetail.action}</p></div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={() => { if (selectedTeamsDetail.action?.includes("Planner")) setM365App("planner"); if (selectedTeamsDetail.action?.includes("SharePoint") || selectedTeamsDetail.action?.includes("file")) setM365App("sharepoint"); setSelectedTeamsDetail(null); }} className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">{selectedTeamsDetail.action}</button>
+                <button onClick={() => { setMessageText(`${selectedTeamsDetail.title}: ${selectedTeamsDetail.body}`); setTeamsView("teams"); setSelectedTeamsDetail(null); }} className="border border-[#5b5fc7] px-4 py-2 font-semibold text-[#5b5fc7]">Post to channel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedListRequest && (
+        <div onClick={() => setSelectedListRequest(null)} className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <div onClick={(e) => e.stopPropagation()} className="m365-modal w-full max-w-2xl max-h-[86vh] overflow-hidden bg-white border border-[#d0d0d0] shadow-2xl flex flex-col">
+            <div className="shrink-0 bg-[#464775] p-5 text-white flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/75">Microsoft Lists request</p>
+                <h2 style={{ color: "#ffffff" }} className="text-2xl font-bold">{selectedListRequest[0]} summary</h2>
+              </div>
+              <button type="button" onClick={(e) => { e.stopPropagation(); window.setTimeout(() => setSelectedListRequest(null), 0); }} className="bg-white px-3 py-2 font-semibold text-[#464775]">Close</button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-5">
+              <p className="text-lg leading-relaxed text-[#242424]">
+                {selectedListRequest[0]} is a {selectedListRequest[6].toLowerCase()} priority {selectedListRequest[3].toLowerCase()} request from {selectedListRequest[1]} to {selectedListRequest[2]}. It is currently marked as {selectedListRequest[5]} and owned by {selectedListRequest[4]}, with a target date of {selectedListRequest[7]}.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ["Requesting team", selectedListRequest[1]],
+                  ["Receiving team", selectedListRequest[2]],
+                  ["Request type", selectedListRequest[3]],
+                  ["Owner", selectedListRequest[4]],
+                  ["Status", selectedListRequest[5]],
+                  ["Priority", selectedListRequest[6]],
+                  ["Due", selectedListRequest[7]],
+                  ["Source", "Microsoft Forms / Lists"],
+                ].map(([label, value]) => <div key={label} className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">{label}</p><p className="font-semibold text-[#242424]">{value}</p></div>)}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={() => { createDemoPlannerTask(`${selectedListRequest[3]} request ${selectedListRequest[0]}`); setSelectedListRequest(null); }} className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">Create Planner task</button>
+                <button onClick={() => { setSelectedThread({ type: "channel", id: selectedListRequest[2], name: selectedListRequest[2], department: selectedListRequest[2] }); setMessageText(`Request follow-up: ${selectedListRequest[0]} needs ${selectedListRequest[3]} from ${selectedListRequest[2]}. Priority: ${selectedListRequest[6]}. Due: ${selectedListRequest[7]}.`); setM365App("teams"); setTeamsView("teams"); setSelectedListRequest(null); }} className="border border-[#5b5fc7] px-4 py-2 font-semibold text-[#5b5fc7]">Draft Teams follow-up</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedSharePointFile && (
+        <div onClick={() => setSelectedSharePointFile(null)} className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <div onClick={(e) => e.stopPropagation()} className="m365-modal w-full max-w-xl max-h-[86vh] overflow-hidden bg-white border border-[#d0d0d0] shadow-2xl flex flex-col">
+            <div className="shrink-0 bg-[#f3f2f1] border-b border-[#d0d0d0] p-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#605e5c]">SharePoint resource</p>
+                <h2 className="m365-modal-title text-2xl font-bold text-[#5b5fc7]">{selectedSharePointFile.title}</h2>
+              </div>
+              <button type="button" onClick={(e) => { e.stopPropagation(); window.setTimeout(() => setSelectedSharePointFile(null), 0); }} className="bg-white border border-[#5b5fc7] px-3 py-2 font-semibold text-[#5b5fc7]">Close</button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4">
+              <p className="text-[#242424]">{selectedSharePointFile.summary}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">Type</p><p className="font-semibold">{selectedSharePointFile.type}</p></div>
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">Owner</p><p className="font-semibold">{selectedSharePointFile.owner}</p></div>
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-3"><p className="text-xs font-bold uppercase text-[#605e5c]">Updated</p><p className="font-semibold">{selectedSharePointFile.updated}</p></div>
+              </div>
+              {sharePointPreviewOpen && (
+                <div className="border border-[#e1dfdd] bg-[#fafafa] p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#605e5c]">Preview</p>
+                  <h3 className="mt-2 text-lg font-bold text-[#5b5fc7]">{selectedSharePointFile.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#242424]">{selectedSharePointFile.summary}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    <div className="bg-white border border-[#e1dfdd] p-3"><span className="font-semibold">Section:</span> {sharePointSection}</div>
+                    <div className="bg-white border border-[#e1dfdd] p-3"><span className="font-semibold">Access:</span> Internal staff</div>
+                  </div>
+                </div>
+              )}
+              {sharePointCopied && <div className="border border-[#107c10] bg-[#dff6dd] p-3 text-sm font-semibold text-[#107c10]">Link copied for sharing inside the prototype.</div>}
+              <div className="flex flex-wrap gap-3">
+                <button onClick={() => { setSharePointPreviewOpen(!sharePointPreviewOpen); showM365Notice("SharePoint preview opened."); }} className="bg-[#5b5fc7] px-4 py-2 font-semibold text-white">{sharePointPreviewOpen ? "Hide preview" : "Open preview"}</button>
+                <button onClick={copySharePointLink} className="border border-[#5b5fc7] px-4 py-2 font-semibold text-[#5b5fc7]">{sharePointCopied ? "Copied" : "Copy link"}</button>
+                <button onClick={() => { createDemoPlannerTask(`Review SharePoint resource: ${selectedSharePointFile.title}`); setPlannerView("myTasks"); setSelectedSharePointFile(null); }} className="border border-[#5b5fc7] px-4 py-2 font-semibold text-[#5b5fc7]">Add review task</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -6927,7 +7316,38 @@ function TaskPlanner({ tasks, setTasks, importantDates, setImportantDates }) {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="planner-page space-y-6">
+      <style>{`
+        .planner-page h1,
+        .planner-page h2,
+        .planner-page h3,
+        .planner-page h4,
+        .planner-page .text-\\[\\#0b4a56\\],
+        .planner-page .text-\\[\\#0b3f49\\],
+        .planner-page .text-\\[\\#0F4E5B\\],
+        .planner-page .text-\\[\\#4f8f26\\] {
+          color: #5b5fc7 !important;
+        }
+        .planner-page .bg-\\[\\#0b4a56\\],
+        .planner-page button.bg-\\[\\#0b4a56\\] {
+          background-color: #5b5fc7 !important;
+          border-color: #5b5fc7 !important;
+        }
+        .planner-page .border-\\[\\#0b4a56\\],
+        .planner-page button.border-\\[\\#0b4a56\\] {
+          border-color: #5b5fc7 !important;
+        }
+        .planner-page .bg-\\[\\#e8eeee\\] {
+          background-color: #f5f4ff !important;
+        }
+        .planner-page .border-\\[\\#bfd0d3\\],
+        .planner-page .border-\\[\\#82c341\\] {
+          border-color: #d7d8f5 !important;
+        }
+        .planner-page .bg-\\[\\#e8f5dc\\] {
+          background-color: #ecebff !important;
+        }
+      `}</style>
       <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div>
           <p className="tracking-[0.28em] text-sm font-bold text-slate-500 uppercase">Microsoft Planner</p>
